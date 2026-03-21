@@ -1,0 +1,33 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  --color-neon-cyan: #00f2ff;
+  --color-neon-purple: #bc13fe;
+  --color-neon-pink: #ff00ff;
+}
+
+@layer base {
+  body {
+    @apply bg-[#0a0a0a] text-zinc-100 font-sans;
+  }
+}
+
+.glass {
+  @apply bg-white/5 backdrop-blur-xl border border-white/10;
+}
+
+.neon-border {
+  @apply border border-neon-cyan/30 shadow-[0_0_15px_rgba(0,242,255,0.1)];
+}
+
+.neon-text {
+  @apply text-neon-cyan drop-shadow-[0_0_8px_rgba(0,242,255,0.5)];
+}
+
+.neon-glow {
+  @apply shadow-[0_0_20px_rgba(0,242,255,0.3)];
+}
