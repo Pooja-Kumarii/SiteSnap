@@ -70,23 +70,26 @@ async function extractAndUploadToR2(siteId: string, zipBuffer: Buffer): Promise<
     if (parts.length > 1) rootPrefix = parts.slice(0, -1).join("/") + "/";
   }
 
-  for (const entry of entries) {
-    if (entry.isDirectory || entry.entryName.toLowerCase().includes("__macosx")) continue;
-    let key = entry.entryName;
-    if (rootPrefix && key.startsWith(rootPrefix)) key = key.slice(rootPrefix.length);
-    if (!key) continue;
+  for (let i = 0; i < entries.length; i += 20) {
+    const batch = entries.slice(i, i + 20);
+    await Promise.all(batch.map(async (entry) => {
+      if (entry.isDirectory || entry.entryName.toLowerCase().includes("__macosx")) return;
+      let key = entry.entryName;
+      if (rootPrefix && key.startsWith(rootPrefix)) key = key.slice(rootPrefix.length);
+      if (!key) return;
 
-    const r2Key = `sites/${siteId}/${key}`;
-    let data = entry.getData();
-    const ext = path.extname(key).toLowerCase();
+      const r2Key = `sites/${siteId}/${key}`;
+      let data = entry.getData();
+      const ext = path.extname(key).toLowerCase();
 
-    if (ext === ".html" || ext === ".htm") {
-      data = Buffer.from(rewriteHtml(data.toString("utf-8"), base), "utf-8");
-    } else if (ext === ".css") {
-      data = Buffer.from(rewriteCss(data.toString("utf-8"), base), "utf-8");
-    }
+      if (ext === ".html" || ext === ".htm") {
+        data = Buffer.from(rewriteHtml(data.toString("utf-8"), base), "utf-8");
+      } else if (ext === ".css") {
+        data = Buffer.from(rewriteCss(data.toString("utf-8"), base), "utf-8");
+      }
 
-    await uploadToR2(r2Key, data, getContentType(ext));
+      await uploadToR2(r2Key, data, getContentType(ext));
+    }));
   }
 }
 

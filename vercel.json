@@ -6,5 +6,13 @@
       { "source": "/sites/:siteId/:path*", "destination": "/api/sites/:siteId/:path*" },
       { "source": "/sites/:siteId", "destination": "/api/sites/:siteId/" },
       { "source": "/(.*)", "destination": "/index.html" }
-    ]
+    ],
+    "functions": {
+      "api/upload/process.ts": {
+        "maxDuration": 300
+      },
+      "api/upload/presign.ts": {
+        "maxDuration": 30
+      }
+    }
   }
