@@ -375,7 +375,7 @@ function HomePage({ onEnterApp, isDark, onToggleTheme }: { onEnterApp: () => voi
           <div style={{ display: 'inline-block', background: t.ctaBox, border: `1px solid ${t.ctaBoxBorder}`, padding: '4rem 5rem', position: 'relative', maxWidth: 640, width: '100%' }}>
             <div style={{ position: 'absolute', top: -1, left: '10%', right: '10%', height: 1, background: `linear-gradient(90deg,transparent,${t.accentText},transparent)` }} />
             <h2 style={{ fontSize: 'clamp(1.9rem,4vw,2.7rem)', fontWeight: 700, letterSpacing: '-.04em', marginBottom: '1rem', color: t.text2 }}>Ready to ship<br />your first site?</h2>
-            <p style={{ color: t.textMuted, fontSize: '.98rem', marginBottom: '2.4rem', lineHeight: 1.75 }}>No account needed. No credit card. Just your ZIP and 30 seconds.</p>
+            <p style={{ color: t.textMuted, fontSize: '.98rem', marginBottom: '2.4rem', lineHeight: 1.75 }}>Free account. No credit card. Just your ZIP and 30 seconds.</p>
             <button onClick={enter} onMouseOver={e => btnHover(e, true)} onMouseOut={e => btnHover(e, false)}
               style={{ background: t.btnPrimary, color: t.btnPrimaryText, border: `2px solid ${t.logoBorder}`, padding: '.85rem 2.2rem', fontFamily: "'Outfit',sans-serif", fontWeight: 700, fontSize: '1rem', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '.04em', boxShadow: `4px 4px 0 ${t.btnPrimaryShadow}`, transition: 'transform .1s,box-shadow .1s', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
               Open SiteSnap <ArrowRight size={16} />
@@ -615,17 +615,20 @@ export default function App() {
     const file = acceptedFiles[0];
     if (!file.name.toLowerCase().endsWith('.zip')) { addToast('warning', 'Invalid File Type', 'Only .zip files are accepted.', 10000); return; }
     setIsUploading(true); setUploadProgress(0);
-    const CHUNK_SIZE = 20 * 1024 * 1024;
+    const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB chunks for Vercel
     const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
     const uploadId = Math.random().toString(36).substring(7);
     try {
       for (let i = 0; i < totalChunks; i++) {
         const chunk = file.slice(i * CHUNK_SIZE, Math.min((i + 1) * CHUNK_SIZE, file.size));
-        const formData = new FormData();
-        formData.append('chunk', chunk); formData.append('uploadId', uploadId);
-        formData.append('chunkIndex', i.toString()); formData.append('totalChunks', totalChunks.toString());
-        formData.append('fileName', file.name);
-        const res = await authFetch('/api/upload/chunk', { method: 'POST', body: formData });
+        // Convert chunk to base64 for Vercel JSON body
+        const arrayBuffer = await chunk.arrayBuffer();
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+        const res = await authFetch('/api/upload/chunk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chunkData: base64, uploadId, chunkIndex: i, totalChunks, fileName: file.name })
+        });
         const result = await res.json();
         if (res.status === 422 || result.error === 'invalid_zip') {
           setIsUploading(false); setUploadProgress(0);
@@ -714,6 +717,8 @@ export default function App() {
                 </div>
                 <p style={{ fontSize: '.9rem', fontWeight: 600, color: t.upTxt, letterSpacing: '.05em', textTransform: 'uppercase', fontFamily: "'DM Mono',monospace" }}>{isUploading ? `Uploading... ${uploadProgress}%` : 'Drop ZIP here'}</p>
                 <p style={{ fontSize: '.72rem', color: t.upSub, marginTop: '.35rem', fontFamily: "'DM Mono',monospace" }}>{isUploading ? 'Please wait — do not close this page' : 'or click to browse files'}</p>
+                {!isUploading && <p style={{ fontSize: '.65rem', color: t.textDim, marginTop: '.25rem', fontFamily: "'DM Mono',monospace", letterSpacing: '.04em' }}>Max file size: 500MB</p>}
+                {!isUploading && <p style={{ fontSize: '.65rem', color: t.textDim, marginTop: '.5rem', fontFamily: "'DM Mono',monospace", background: t.bg3, border: `1px solid ${t.border}`, padding: '.2rem .6rem' }}>Max file size: 500MB</p>}
               </div>
             </div>
           </div>

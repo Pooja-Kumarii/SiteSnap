@@ -1,0 +1,20 @@
+{
+    "buildCommand": "npm run build",
+    "outputDirectory": "dist",
+    "framework": null,
+    "rewrites": [
+      { "source": "/api/(.*)", "destination": "/api/$1" },
+      { "source": "/sites/:siteId", "destination": "/api/sites/:siteId/index" },
+      { "source": "/sites/:siteId/(.*)", "destination": "/api/sites/:siteId/$1" },
+      { "source": "/(.*)", "destination": "/index.html" }
+    ],
+    "functions": {
+      "api/**/*.ts": {
+        "maxDuration": 60
+      },
+      "api/upload/chunk.ts": {
+        "maxDuration": 300,
+        "memory": 1024
+      }
+    }
+  }
