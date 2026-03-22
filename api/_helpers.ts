@@ -9,7 +9,7 @@ const { Pool } = pkg;
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
-  max: 10,
+  max: 1, // Keep low for serverless
 });
 
 // ── R2 Client ─────────────────────────────────────────────────────────────────
