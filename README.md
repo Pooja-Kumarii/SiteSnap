@@ -140,13 +140,11 @@ Visit `http://localhost:3000`
 
 ## 🚀 Deployment
 
-SiteSnap is designed to be deployed on [Render](https://render.com) (free tier) with:
+SiteSnap is deployed on [Vercel](https://vercel.com) (free) with:
 - **Supabase** for the PostgreSQL database (free)
 - **Cloudflare R2** for file storage (free — 10GB)
 
-A `render.yaml` file is included for one-click deployment.
-
-### Environment Variables (set in Render dashboard)
+### Environment Variables (set in Vercel dashboard)
 
 | Variable | Description |
 |----------|-------------|
@@ -156,7 +154,6 @@ A `render.yaml` file is included for one-click deployment.
 | `R2_ACCESS_KEY_ID` | R2 API access key |
 | `R2_SECRET_ACCESS_KEY` | R2 API secret key |
 | `R2_BUCKET_NAME` | R2 bucket name (e.g. `sitesnap-files`) |
-| `NODE_ENV` | Set to `production` |
 
 ---
 
@@ -204,15 +201,10 @@ SiteSnap is built with security as a priority:
 
 ---
 
-## 🤝 Contributing
+## 👩‍💻 Author
 
-Contributions are welcome! Feel free to open an issue or submit a pull request.
-
----
-
-## 📄 License
-
-This project is licensed under the Apache 2.0 License.
+**Devjani**
+- GitHub: [@Pooja-Kumarii](https://github.com/Pooja-Kumarii)
 
 ---
 
