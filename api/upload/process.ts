@@ -1,19 +1,26 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { requireAuth, sanitize, isValidUUID, uploadToR2, getContentType, securityHeaders, R2_BUCKET } from "../_helpers.js";
+import { requireAuth, sanitize, securityHeaders, uploadToR2, getContentType, getFromR2, deleteFromR2, pool } from "../_helpers.js";
+import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import AdmZip from "adm-zip";
 import { v4 as uuidv4 } from "uuid";
-import { pool } from "../_helpers.js";
 import path from "path";
 
-// ── In-memory chunk store (works for single serverless instance) ──────────────
-const chunkStore = new Map<string, { chunks: Map<number, Buffer>; total: number; fileName: string }>();
+const r2Client = new S3Client({
+  region: "auto",
+  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+  },
+});
 
-const MAX_FILE_SIZE_MB = 500;
-const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+const R2_BUCKET = process.env.R2_BUCKET_NAME || "sitesnap-files";
+
+const MAX_FILE_SIZE_BYTES = 500 * 1024 * 1024;
 
 function validateZip(buf: Buffer): { valid: boolean; reason: string } {
   try {
-    if (buf.length > MAX_FILE_SIZE_BYTES) return { valid: false, reason: `ZIP too large. Max ${MAX_FILE_SIZE_MB}MB.` };
+    if (buf.length > MAX_FILE_SIZE_BYTES) return { valid: false, reason: "ZIP too large. Max 500MB." };
     const zip = new AdmZip(buf);
     const entries = zip.getEntries();
     if (!entries?.length) return { valid: false, reason: "ZIP is empty." };
@@ -83,7 +90,7 @@ async function extractAndUploadToR2(siteId: string, zipBuffer: Buffer): Promise<
   }
 }
 
-export const config = { api: { bodyParser: { sizeLimit: "525mb" } } };
+export const config = { api: { bodyParser: { sizeLimit: "1mb" } } };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   Object.entries(securityHeaders).forEach(([k, v]) => res.setHeader(k, v));
@@ -94,49 +101,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!user) return res.status(401).json({ error: "Not authenticated." });
 
   try {
-    const { uploadId, chunkIndex, totalChunks, fileName, chunkData } = req.body;
+    const { r2Key, fileName } = req.body;
+    if (!r2Key || !fileName) return res.status(400).json({ error: "Missing r2Key or fileName" });
 
-    if (!uploadId || !/^[a-z0-9]+$/i.test(uploadId) || uploadId.length > 50) return res.status(400).json({ error: "Invalid upload ID." });
-    const chunkIdx = parseInt(chunkIndex);
-    const totalChunksNum = parseInt(totalChunks);
-    if (isNaN(chunkIdx) || isNaN(totalChunksNum) || chunkIdx < 0 || totalChunksNum > 1000) return res.status(400).json({ error: "Invalid chunk parameters." });
+    // Download the ZIP from R2 temp location
+    const zipBuffer = await getFromR2(r2Key);
+    if (!zipBuffer) return res.status(400).json({ error: "Upload not found. Please try again." });
 
-    // Store chunk in memory
-    if (!chunkStore.has(uploadId)) {
-      chunkStore.set(uploadId, { chunks: new Map(), total: totalChunksNum, fileName });
-    }
-    const upload = chunkStore.get(uploadId)!;
-    const chunkBuffer = Buffer.from(chunkData, "base64");
-    upload.chunks.set(chunkIdx, chunkBuffer);
-
-    if (upload.chunks.size === totalChunksNum) {
-      // All chunks received — assemble
-      const parts: Buffer[] = [];
-      for (let i = 0; i < totalChunksNum; i++) {
-        const chunk = upload.chunks.get(i);
-        if (!chunk) throw new Error(`Missing chunk ${i}`);
-        parts.push(chunk);
-      }
-      const zipBuffer = Buffer.concat(parts);
-      chunkStore.delete(uploadId);
-
-      const v = validateZip(zipBuffer);
-      if (!v.valid) return res.status(422).json({ error: "invalid_zip", message: v.reason });
-
-      const siteId = uuidv4();
-      const siteName = sanitize((fileName as string).replace(/\.zip$/i, "") || "Untitled Site");
-
-      await extractAndUploadToR2(siteId, zipBuffer);
-
-      const siteUrl = `/sites/${siteId}/`;
-      await pool.query("INSERT INTO sites (id, user_id, name, url) VALUES ($1, $2, $3, $4)", [siteId, user.userId, siteName, siteUrl]);
-
-      return res.json({ id: siteId, name: siteName, url: siteUrl, completed: true });
+    // Validate the ZIP
+    const v = validateZip(zipBuffer);
+    if (!v.valid) {
+      // Clean up temp file
+      await r2Client.send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: r2Key }));
+      return res.status(422).json({ error: "invalid_zip", message: v.reason });
     }
 
-    res.json({ chunkReceived: true, progress: Math.round((upload.chunks.size / totalChunksNum) * 100) });
+    // Process and upload to permanent location
+    const siteId = uuidv4();
+    const siteName = sanitize(fileName.replace(/\.zip$/i, "") || "Untitled Site");
+
+    await extractAndUploadToR2(siteId, zipBuffer);
+
+    // Delete temp file
+    await r2Client.send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: r2Key }));
+
+    // Save to database
+    const siteUrl = `/sites/${siteId}/`;
+    await pool.query(
+      "INSERT INTO sites (id, user_id, name, url) VALUES ($1, $2, $3, $4)",
+      [siteId, user.userId, siteName, siteUrl]
+    );
+
+    return res.json({ id: siteId, name: siteName, url: siteUrl, completed: true });
   } catch (e: any) {
-    console.error("Upload error:", e);
-    res.status(500).json({ error: "Upload failed." });
+    console.error("Process error:", e);
+    return res.status(500).json({ error: "Failed to process site." });
   }
 }

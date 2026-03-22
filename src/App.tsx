@@ -614,37 +614,48 @@ export default function App() {
     if (rejectedFiles.length > 0 || acceptedFiles.length === 0) { addToast('warning', 'Invalid File Type', 'Only .zip files are accepted. Please export your site as a ZIP using the Simply Static plugin and try again.', 10000); return; }
     const file = acceptedFiles[0];
     if (!file.name.toLowerCase().endsWith('.zip')) { addToast('warning', 'Invalid File Type', 'Only .zip files are accepted.', 10000); return; }
+
     setIsUploading(true); setUploadProgress(0);
-    const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB chunks for Vercel
-    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-    const uploadId = Math.random().toString(36).substring(7);
+
     try {
-      for (let i = 0; i < totalChunks; i++) {
-        const chunk = file.slice(i * CHUNK_SIZE, Math.min((i + 1) * CHUNK_SIZE, file.size));
-        // Convert chunk to base64 for Vercel JSON body
-        const arrayBuffer = await chunk.arrayBuffer();
-        const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-        const res = await authFetch('/api/upload/chunk', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chunkData: base64, uploadId, chunkIndex: i, totalChunks, fileName: file.name })
-        });
-        const result = await res.json();
-        if (res.status === 422 || result.error === 'invalid_zip') {
-          setIsUploading(false); setUploadProgress(0);
-          addToast('warning', 'Invalid ZIP — No Site Found', 'Your ZIP does not contain a valid static site. Please use the Simply Static plugin to export your WordPress site correctly, then try again.', 10000);
-          return;
-        }
-        if (!res.ok) throw new Error(result.error || 'Upload failed');
-        if (result.completed) {
-          setUploadProgress(100);
-          setSites(prev => [{ id: result.id, name: result.name, created_at: new Date().toISOString(), url: result.url }, ...prev]);
-          setIsUploading(false); setUploadProgress(0);
-          addToast('success', 'Site Deployed!', `"${result.name}" is now live. Copy the link and share it!`);
-          return;
-        }
-        setUploadProgress(Math.round(((i + 1) / totalChunks) * 100));
+      // Step 1 — Get presigned URL from server
+      const presignRes = await authFetch('/api/upload/presign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName: file.name, fileSize: file.size })
+      });
+      if (!presignRes.ok) throw new Error('Failed to get upload URL');
+      const { presignedUrl, r2Key } = await presignRes.json();
+
+      // Step 2 — Upload directly to R2 (no Vercel size limit!)
+      const uploadRes = await fetch(presignedUrl, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': 'application/zip' },
+      });
+      if (!uploadRes.ok) throw new Error('Failed to upload file');
+      setUploadProgress(80);
+
+      // Step 3 — Tell server to process the uploaded ZIP
+      const processRes = await authFetch('/api/upload/process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ r2Key, fileName: file.name })
+      });
+      const result = await processRes.json();
+
+      if (processRes.status === 422 || result.error === 'invalid_zip') {
+        setIsUploading(false); setUploadProgress(0);
+        addToast('warning', 'Invalid ZIP — No Site Found', 'Your ZIP does not contain a valid static site. Please use the Simply Static plugin to export your WordPress site correctly, then try again.', 10000);
+        return;
       }
+      if (!processRes.ok) throw new Error(result.error || 'Processing failed');
+
+      setUploadProgress(100);
+      setSites(prev => [{ id: result.id, name: result.name, created_at: new Date().toISOString(), url: result.url }, ...prev]);
+      setIsUploading(false); setUploadProgress(0);
+      addToast('success', 'Site Deployed!', `"${result.name}" is now live. Copy the link and share it!`);
+
     } catch { setIsUploading(false); setUploadProgress(0); addToast('error', 'Upload Failed', 'Something went wrong. Try again or check your connection.'); }
   }, [addToast]);
 
