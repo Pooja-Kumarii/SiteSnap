@@ -203,7 +203,7 @@ SiteSnap is built with security as a priority:
 
 ## 👩‍💻 Author
 
-**Devjani**
+**Pooja Kumari**
 - GitHub: [@Pooja-Kumarii](https://github.com/Pooja-Kumarii)
 
 ---
