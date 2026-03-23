@@ -25,7 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Save to database FIRST with "processing" status
-    const siteUrl = `/sites/${siteId}/`;
+    const siteUrl = `${workerUrl}/sites/${siteId}/`;
     await pool.query(
       "INSERT INTO sites (id, user_id, name, url) VALUES ($1, $2, $3, $4)",
       [siteId, user.userId, siteName, siteUrl]
