@@ -94,10 +94,8 @@ const LIGHT = {
 // ── Pixel Chain Logo SVG ──────────────────────────────────────────────────────
 function ChainLogo({ size = 32, color = '#2d2b26' }: { size?: number; color?: string }) {
   const p = color;
-  // 52×32 grid pixel-art chain — two oval links connected by a bar
   return (
     <svg width={size} height={Math.round(size * 0.62)} viewBox="0 0 52 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-      {/* Left link */}
       <rect x="0" y="10" width="3" height="12" fill={p}/>
       <rect x="3" y="5"  width="3" height="5"  fill={p}/>
       <rect x="6" y="2"  width="7" height="3"  fill={p}/>
@@ -108,9 +106,7 @@ function ChainLogo({ size = 32, color = '#2d2b26' }: { size?: number; color?: st
       <rect x="16" y="10" width="3" height="4" fill={p}/>
       <rect x="16" y="18" width="3" height="4" fill={p}/>
       <rect x="16" y="14" width="3" height="4" fill={p}/>
-      {/* connector */}
       <rect x="19" y="14" width="14" height="4" fill={p}/>
-      {/* Right link */}
       <rect x="33" y="10" width="3" height="4" fill={p}/>
       <rect x="33" y="18" width="3" height="4" fill={p}/>
       <rect x="33" y="14" width="3" height="4" fill={p}/>
@@ -139,7 +135,6 @@ function useScrollReveal(threshold = 0.15) {
 
 type RevealDir = 'up' | 'down' | 'left' | 'right' | 'fade';
 
-// Scroll-triggered reveal for sections below the fold
 function Reveal({ children, dir = 'up', delay = 0, style }: { children: React.ReactNode; dir?: RevealDir; delay?: number; style?: React.CSSProperties }) {
   const { ref, visible } = useScrollReveal();
   const tx: Record<RevealDir, string> = { up: 'translateY(40px)', down: 'translateY(-40px)', left: 'translateX(-50px)', right: 'translateX(50px)', fade: 'none' };
@@ -150,7 +145,6 @@ function Reveal({ children, dir = 'up', delay = 0, style }: { children: React.Re
   );
 }
 
-// Mount-triggered reveal for hero (fires immediately on load)
 function HeroReveal({ children, dir = 'up', delay = 0, style }: { children: React.ReactNode; dir?: RevealDir; delay?: number; style?: React.CSSProperties }) {
   const [vis, setVis] = useState(false);
   useEffect(() => { const id = setTimeout(() => setVis(true), delay); return () => clearTimeout(id); }, [delay]);
@@ -275,8 +269,6 @@ function HomePage({ onEnterApp, isDark, onToggleTheme }: { onEnterApp: () => voi
     <div style={{ background: t.bg, minHeight: '100vh', color: t.text, fontFamily: "'Outfit', sans-serif", overflowX: 'hidden', transition: 'background 0.3s,color 0.3s' }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');*{box-sizing:border-box;}@keyframes hpPulse{0%,100%{opacity:1;}50%{opacity:.35;}}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
       <ConstellationCanvas isDark={isDark} />
-
-      {/* NAV */}
       <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.4rem 3rem', borderBottom: `1px solid ${t.border}`, position: 'sticky', top: 0, background: t.navBg, backdropFilter: 'blur(16px)', zIndex: 100, transition: 'background 0.3s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <ChainLogo size={38} color={isDark ? '#e8e6df' : '#2d2b26'} />
@@ -287,8 +279,6 @@ function HomePage({ onEnterApp, isDark, onToggleTheme }: { onEnterApp: () => voi
           <button onClick={enter} style={{ background: t.btnPrimary, color: t.btnPrimaryText, border: 'none', padding: '.55rem 1.3rem', fontFamily: "'Outfit',sans-serif", fontWeight: 700, fontSize: '.85rem', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '.04em' }}>Launch App</button>
         </div>
       </nav>
-
-      {/* HERO */}
       <section style={{ minHeight: '88vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '5rem 2rem 4rem', position: 'relative', zIndex: 1 }}>
         <HeroReveal dir="down" delay={0}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: t.bg3, border: `1px solid ${t.border}`, padding: '.4rem 1rem', fontFamily: "'DM Mono',monospace", fontSize: '.72rem', color: t.accentText, marginBottom: '2rem', letterSpacing: '.06em' }}>
@@ -325,8 +315,6 @@ function HomePage({ onEnterApp, isDark, onToggleTheme }: { onEnterApp: () => voi
           </div>
         </HeroReveal>
       </section>
-
-      {/* FEATURES */}
       <section style={{ padding: '6rem 3rem', position: 'relative', zIndex: 1 }}>
         <Reveal dir="up" delay={0}>
           <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '.7rem', color: t.accentText, letterSpacing: '.12em', textTransform: 'uppercase', marginBottom: '.8rem' }}>// Features</div>
@@ -346,8 +334,6 @@ function HomePage({ onEnterApp, isDark, onToggleTheme }: { onEnterApp: () => voi
           ))}
         </div>
       </section>
-
-      {/* HOW IT WORKS */}
       <section id="hp-how" style={{ padding: '6rem 3rem', background: t.bg2, borderTop: `1px solid ${t.border}`, borderBottom: `1px solid ${t.border}`, position: 'relative', zIndex: 1 }}>
         <div style={{ maxWidth: 900, margin: '0 auto' }}>
           <Reveal dir="up">
@@ -368,8 +354,6 @@ function HomePage({ onEnterApp, isDark, onToggleTheme }: { onEnterApp: () => voi
           ))}
         </div>
       </section>
-
-      {/* CTA */}
       <section style={{ padding: '7rem 3rem', textAlign: 'center', position: 'relative', zIndex: 1 }}>
         <Reveal dir="up">
           <div style={{ display: 'inline-block', background: t.ctaBox, border: `1px solid ${t.ctaBoxBorder}`, padding: '4rem 5rem', position: 'relative', maxWidth: 640, width: '100%' }}>
@@ -383,8 +367,6 @@ function HomePage({ onEnterApp, isDark, onToggleTheme }: { onEnterApp: () => voi
           </div>
         </Reveal>
       </section>
-
-      {/* FOOTER */}
       <footer style={{ borderTop: `1px solid ${t.border}`, padding: '1.8rem 3rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <ChainLogo size={26} color={isDark ? '#e8e6df' : '#2d2b26'} />
@@ -410,7 +392,6 @@ function AuthPage({ mode, isDark, onToggleTheme, onAuth }: { mode: 'login' | 'si
 
   const handleSubmit = async () => {
     setError('');
-    // Client-side validation first
     if (!email.trim()) { setError('Please enter your email address.'); return; }
     if (!password.trim()) { setError('Please enter your password.'); return; }
     if (!isLogin && password.length < 8) { setError('Password must be at least 8 characters.'); return; }
@@ -445,8 +426,6 @@ function AuthPage({ mode, isDark, onToggleTheme, onAuth }: { mode: 'login' | 'si
         input:-webkit-autofill{-webkit-box-shadow:0 0 0 1000px ${isDark ? '#080810' : '#faf9f4'} inset !important;-webkit-text-fill-color:${t.text} !important;}
       `}</style>
       <ConstellationCanvas isDark={isDark} />
-
-      {/* Nav */}
       <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.2rem 3rem', borderBottom: `1px solid ${t.border}`, background: t.navBg, backdropFilter: 'blur(16px)', position: 'sticky', top: 0, zIndex: 100 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <ChainLogo size={34} color={isDark ? '#e8e6df' : '#2d2b26'} />
@@ -454,17 +433,10 @@ function AuthPage({ mode, isDark, onToggleTheme, onAuth }: { mode: 'login' | 'si
         </div>
         <ThemeToggle isDark={isDark} onToggle={onToggleTheme} />
       </nav>
-
-      {/* Form */}
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '3rem 1.5rem', position: 'relative', zIndex: 1 }}>
         <div style={{ width: '100%', maxWidth: 440, animation: 'slideUp 0.6s cubic-bezier(0.22,1,0.36,1)' }}>
-
-          {/* Card */}
           <div style={{ background: t.panelBg, border: `1px solid ${t.border}`, padding: '2.8rem 2.5rem', position: 'relative', boxShadow: isDark ? '0 24px 64px rgba(0,0,0,0.4)' : '0 24px 64px rgba(0,0,0,0.08)' }}>
-            {/* Top accent line */}
             <div style={{ position: 'absolute', top: 0, left: '15%', right: '15%', height: 2, background: `linear-gradient(90deg,transparent,${t.accent},transparent)` }} />
-
-            {/* Header */}
             <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
               <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.2rem' }}>
                 <ChainLogo size={48} color={isDark ? '#e8e6df' : '#2d2b26'} />
@@ -479,21 +451,17 @@ function AuthPage({ mode, isDark, onToggleTheme, onAuth }: { mode: 'login' | 'si
                 {isLogin ? 'Access your deployed WordPress sites.' : 'Free forever. No credit card required.'}
               </p>
             </div>
-
-            {/* Toggle tabs */}
             <div style={{ display: 'flex', background: isDark ? '#050508' : '#ece9d8', border: `1px solid ${t.border}`, marginBottom: '1.8rem' }}>
               {(['Sign In', 'Sign Up'] as const).map((label, i) => {
                 const active = (i === 0) === isLogin;
                 return (
                   <button key={label} onClick={() => { setIsLogin(i === 0); setError(''); setEmail(''); setPassword(''); }}
-                    style={{ flex: 1, padding: '.6rem', fontFamily: "'Outfit',sans-serif", fontWeight: 600, fontSize: '.85rem', cursor: 'pointer', border: 'none', background: active ? t.accent : 'transparent', color: active ? (isDark ? '#000' : '#000') : t.textMuted, transition: 'all 0.2s', textTransform: 'uppercase', letterSpacing: '.04em' }}>
+                    style={{ flex: 1, padding: '.6rem', fontFamily: "'Outfit',sans-serif", fontWeight: 600, fontSize: '.85rem', cursor: 'pointer', border: 'none', background: active ? t.accent : 'transparent', color: active ? '#000' : t.textMuted, transition: 'all 0.2s', textTransform: 'uppercase', letterSpacing: '.04em' }}>
                     {label}
                   </button>
                 );
               })}
             </div>
-
-            {/* Error */}
             <AnimatePresence>
               {error && (
                 <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
@@ -502,8 +470,6 @@ function AuthPage({ mode, isDark, onToggleTheme, onAuth }: { mode: 'login' | 'si
                 </motion.div>
               )}
             </AnimatePresence>
-
-            {/* Fields */}
             <div style={{ marginBottom: '.8rem' }}>
               <label style={{ display: 'block', fontFamily: "'DM Mono',monospace", fontSize: '.65rem', color: t.accentText, letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: '.45rem', fontWeight: 500 }}>Email address</label>
               <input type="email" value={email} onChange={e => setEmail(e.target.value)}
@@ -511,7 +477,6 @@ function AuthPage({ mode, isDark, onToggleTheme, onAuth }: { mode: 'login' | 'si
                 placeholder="you@example.com" style={inputStyle('email')}
                 onKeyDown={e => e.key === 'Enter' && handleSubmit()} />
             </div>
-
             <div style={{ marginBottom: '1.6rem' }}>
               <label style={{ display: 'block', fontFamily: "'DM Mono',monospace", fontSize: '.65rem', color: t.accentText, letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: '.45rem', fontWeight: 500 }}>Password</label>
               <input type="password" value={password} onChange={e => setPassword(e.target.value)}
@@ -530,15 +495,11 @@ function AuthPage({ mode, isDark, onToggleTheme, onAuth }: { mode: 'login' | 'si
                 </div>
               )}
             </div>
-
-            {/* Submit */}
             <button onClick={handleSubmit} disabled={loading}
               style={{ width: '100%', background: t.btnPrimary, color: t.btnPrimaryText, border: `2px solid ${t.logoBorder}`, padding: '0.9rem', fontFamily: "'Outfit',sans-serif", fontWeight: 700, fontSize: '.95rem', cursor: loading ? 'not-allowed' : 'pointer', textTransform: 'uppercase', letterSpacing: '.06em', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: loading ? 0.75 : 1, boxShadow: loading ? 'none' : `4px 4px 0 ${t.btnPrimaryShadow}`, transition: 'all 0.15s' }}>
               {loading ? <Loader2 size={17} style={{ animation: 'spin 1s linear infinite' }} /> : null}
               {loading ? 'Please wait...' : (isLogin ? 'Sign In →' : 'Create Account →')}
             </button>
-
-            {/* Switch mode */}
             <p style={{ textAlign: 'center', marginTop: '1.4rem', fontSize: '.85rem', color: t.textMuted }}>
               {isLogin ? "Don't have an account? " : 'Already have an account? '}
               <button onClick={() => { setIsLogin(!isLogin); setError(''); setEmail(''); setPassword(''); }}
@@ -547,8 +508,6 @@ function AuthPage({ mode, isDark, onToggleTheme, onAuth }: { mode: 'login' | 'si
               </button>
             </p>
           </div>
-
-          {/* Footer note */}
           <p style={{ textAlign: 'center', marginTop: '1.2rem', fontFamily: "'DM Mono',monospace", fontSize: '.62rem', color: t.textDim, letterSpacing: '.04em' }}>
             🔒 PASSWORDS ENCRYPTED · DATA NEVER SOLD
           </p>
@@ -567,7 +526,6 @@ export default function App() {
   const toggleTheme = () => setIsDark(prev => { const n = !prev; localStorage.setItem('sitesnap-theme', n ? 'dark' : 'light'); return n; });
   const t = isDark ? DARK : LIGHT;
 
-  // ── Auth state ──────────────────────────────────────────────────────────────
   const [authUser, setAuthUser] = useState<AuthUser | null>(() => {
     try { const u = localStorage.getItem('sitesnap-user'); return u ? JSON.parse(u) : null; } catch { return null; }
   });
@@ -576,7 +534,6 @@ export default function App() {
   const handleAuth = (user: AuthUser, token: string) => { setAuthUser(user); setAuthToken(token); };
   const handleLogout = () => { localStorage.removeItem('sitesnap-token'); localStorage.removeItem('sitesnap-user'); setAuthUser(null); setAuthToken(null); setSites([]); sessionStorage.removeItem('inApp'); setShowHome(true); };
 
-  // Authenticated fetch helper
   const authFetch = useCallback((url: string, options: RequestInit = {}) => {
     return fetch(url, { ...options, headers: { ...options.headers, 'Authorization': `Bearer ${authToken}` } });
   }, [authToken]);
@@ -618,7 +575,6 @@ export default function App() {
     setIsUploading(true); setUploadProgress(0);
 
     try {
-      // Step 1 — Get presigned URL from server
       const presignRes = await authFetch('/api/upload/presign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -627,7 +583,6 @@ export default function App() {
       if (!presignRes.ok) throw new Error('Failed to get upload URL');
       const { presignedUrl, r2Key } = await presignRes.json();
 
-      // Step 2 — Upload directly to R2 (no Vercel size limit!)
       const uploadRes = await fetch(presignedUrl, {
         method: 'PUT',
         body: file,
@@ -636,7 +591,6 @@ export default function App() {
       if (!uploadRes.ok) throw new Error('Failed to upload file');
       setUploadProgress(80);
 
-      // Step 3 — Tell server to process the uploaded ZIP
       const processRes = await authFetch('/api/upload/process', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -660,10 +614,15 @@ export default function App() {
   }, [addToast]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, accept: { 'application/zip': ['.zip'] }, multiple: false });
-  const copyToClipboard = (url: string, id: string) => { navigator.clipboard.writeText(`${window.location.origin}${url}`); setCopiedId(id); setTimeout(() => setCopiedId(null), 2000); };
+
+  // ✅ FIX: Use site.url directly — it already contains the full Worker URL
+  const copyToClipboard = (url: string, id: string) => {
+    navigator.clipboard.writeText(url);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
 
   if (!authUser) return <AuthPage mode="login" isDark={isDark} onToggleTheme={toggleTheme} onAuth={handleAuth} />;
-
   if (showHome) return <HomePage onEnterApp={() => { sessionStorage.setItem('inApp', '1'); setShowHome(false); }} isDark={isDark} onToggleTheme={toggleTheme} />;
 
   return (
@@ -672,7 +631,6 @@ export default function App() {
       <ConstellationCanvas isDark={isDark} />
       <ToastContainer toasts={toasts} onRemove={removeToast} isDark={isDark} />
 
-      {/* NAV */}
       <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.1rem 3rem', borderBottom: `1px solid ${t.border}`, background: t.navBg, backdropFilter: 'blur(16px)', position: 'sticky', top: 0, zIndex: 50, transition: 'background 0.3s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <button onClick={() => { sessionStorage.removeItem('inApp'); setShowHome(true); }}
@@ -705,7 +663,6 @@ export default function App() {
         </div>
       </nav>
 
-      {/* BODY */}
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '3rem', position: 'relative', zIndex: 1 }}>
         <div style={{ textAlign: 'center', marginBottom: '3rem' }}>
           <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '.7rem', color: t.accentText, letterSpacing: '.12em', textTransform: 'uppercase', marginBottom: '.7rem' }}>// Deploy</div>
@@ -716,7 +673,6 @@ export default function App() {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-          {/* UPLOAD */}
           <div style={{ background: t.panelBg, border: `1px solid ${t.border}`, padding: '2rem' }}>
             <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '.7rem', color: t.accentText, letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: '1.2rem', display: 'flex', alignItems: 'center', gap: 8 }}><Upload size={12} /> Upload</div>
             <div {...getRootProps()} style={{ height: 290, border: `1.5px dashed ${isDragActive ? t.text : t.uploadBorder}`, background: isDragActive ? t.bg4 : t.uploadBg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative', overflow: 'hidden', transition: 'border-color .2s,background .2s' }}>
@@ -728,13 +684,11 @@ export default function App() {
                 </div>
                 <p style={{ fontSize: '.9rem', fontWeight: 600, color: t.upTxt, letterSpacing: '.05em', textTransform: 'uppercase', fontFamily: "'DM Mono',monospace" }}>{isUploading ? `Uploading... ${uploadProgress}%` : 'Drop ZIP here'}</p>
                 <p style={{ fontSize: '.72rem', color: t.upSub, marginTop: '.35rem', fontFamily: "'DM Mono',monospace" }}>{isUploading ? 'Please wait — do not close this page' : 'or click to browse files'}</p>
-                {!isUploading && <p style={{ fontSize: '.65rem', color: t.textDim, marginTop: '.25rem', fontFamily: "'DM Mono',monospace", letterSpacing: '.04em' }}>Max file size: 500MB</p>}
                 {!isUploading && <p style={{ fontSize: '.65rem', color: t.textDim, marginTop: '.5rem', fontFamily: "'DM Mono',monospace", background: t.bg3, border: `1px solid ${t.border}`, padding: '.2rem .6rem' }}>Max file size: 500MB</p>}
               </div>
             </div>
           </div>
 
-          {/* DEPLOYS */}
           <div style={{ background: t.panelBg, border: `1px solid ${t.border}`, padding: '2rem' }}>
             <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '.7rem', color: t.accentText, letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: '1.2rem', display: 'flex', alignItems: 'center', gap: 8 }}>
               <History size={12} /> Your Deploys
@@ -752,13 +706,15 @@ export default function App() {
                           <span style={{ fontFamily: "'DM Mono',monospace", fontSize: '.65rem', color: t.depNumText, background: t.depNum, border: `1px solid ${t.depNumBorder}`, padding: '.15rem .5rem' }}>{String(i + 1).padStart(2, '0')}</span>
                           <span style={{ fontSize: '.85rem', fontWeight: 600, color: t.text, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{site.name}</span>
                         </div>
-                        <a href={`${window.location.origin}${site.url}`} target="_blank" rel="noreferrer"
+                        {/* ✅ FIX: Use site.url directly — already full Worker URL */}
+                        <a href={site.url} target="_blank" rel="noreferrer"
                           style={{ width: 28, height: 28, background: t.btnPrimary, border: `1.5px solid ${t.logoBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}>
                           <ExternalLink size={12} color={t.btnPrimaryText} />
                         </a>
                       </div>
+                      {/* ✅ FIX: Display site.url directly */}
                       <div style={{ background: t.depUrl, border: `1px solid ${t.depUrlBorder}`, padding: '.45rem .75rem', fontFamily: "'DM Mono',monospace", fontSize: '.65rem', color: t.textDim, marginBottom: '.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {window.location.origin}{site.url}
+                        {site.url}
                       </div>
                       <div style={{ display: 'flex', gap: '.5rem' }}>
                         <button onClick={() => copyToClipboard(site.url, site.id)}
