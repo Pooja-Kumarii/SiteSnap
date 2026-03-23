@@ -17,22 +17,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const siteId = uuidv4();
     const siteName = sanitize(fileName.replace(/\.zip$/i, "") || "Untitled Site");
-    const workerUrl = process.env.WORKER_URL;
+
+    let workerUrl = (process.env.WORKER_URL || "").trim().replace(/\/$/, "");
     const workerSecret = process.env.WORKER_SECRET;
 
     if (!workerUrl || !workerSecret) {
       return res.status(500).json({ error: "Worker not configured." });
     }
 
-    // Save to database FIRST with "processing" status
-    const siteUrl = `${workerUrl}/sites/${siteId}/`;
-    await pool.query(
-      "INSERT INTO sites (id, user_id, name, url) VALUES ($1, $2, $3, $4)",
-      [siteId, user.userId, siteName, siteUrl]
-    );
-
-    // Fire and forget — call Worker WITHOUT awaiting it
-    // This prevents Vercel from timing out
+    // Fire and forget — call Worker WITHOUT awaiting
     fetch(`${workerUrl}`, {
       method: "POST",
       headers: {
@@ -42,7 +35,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       body: JSON.stringify({ r2Key, fileName, userId: user.userId, siteId }),
     }).catch((err) => console.error("Worker fire-and-forget error:", err));
 
-    // Return success immediately — Worker processes in background
+    // Save to database with correct Worker URL
+    const siteUrl = `${workerUrl}/sites/${siteId}/`;
+    await pool.query(
+      "INSERT INTO sites (id, user_id, name, url) VALUES ($1, $2, $3, $4)",
+      [siteId, user.userId, siteName, siteUrl]
+    );
+
     return res.json({ id: siteId, name: siteName, url: siteUrl, completed: true });
 
   } catch (e: any) {
