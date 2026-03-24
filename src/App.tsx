@@ -572,6 +572,13 @@ export default function App() {
     const file = acceptedFiles[0];
     if (!file.name.toLowerCase().endsWith('.zip')) { addToast('warning', 'Invalid File Type', 'Only .zip files are accepted.', 10000); return; }
 
+    // ✅ Check file size BEFORE uploading — max 5MB on free plan
+    const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+    if (file.size > MAX_SIZE) {
+      addToast('error', 'File Too Large ❌', `Your ZIP is ${(file.size / 1024 / 1024).toFixed(1)}MB. Maximum allowed size is 5MB. Please reduce your site size by removing unused images or plugins in Simply Static, then export again.`, 12000);
+      return;
+    }
+
     setIsUploading(true); setUploadProgress(0);
 
     try {
@@ -598,7 +605,12 @@ export default function App() {
       });
       const result = await processRes.json();
 
-      if (processRes.status === 422 || result.error === 'invalid_zip') {
+      if (processRes.status === 413 || result.error === "file_too_large") {
+        setIsUploading(false); setUploadProgress(0);
+        addToast("error", "File Too Large ❌", result.message || "Your ZIP file exceeds the 5MB limit. Please reduce your site size and try again.", 12000);
+        return;
+      }
+      if (processRes.status === 422 || result.error === "invalid_zip") {
         setIsUploading(false); setUploadProgress(0);
         addToast('warning', 'Invalid ZIP — No Site Found', 'Your ZIP does not contain a valid static site. Please use the Simply Static plugin to export your WordPress site correctly, then try again.', 10000);
         return;
@@ -684,7 +696,7 @@ export default function App() {
                 </div>
                 <p style={{ fontSize: '.9rem', fontWeight: 600, color: t.upTxt, letterSpacing: '.05em', textTransform: 'uppercase', fontFamily: "'DM Mono',monospace" }}>{isUploading ? `Uploading... ${uploadProgress}%` : 'Drop ZIP here'}</p>
                 <p style={{ fontSize: '.72rem', color: t.upSub, marginTop: '.35rem', fontFamily: "'DM Mono',monospace" }}>{isUploading ? 'Please wait — do not close this page' : 'or click to browse files'}</p>
-                {!isUploading && <p style={{ fontSize: '.65rem', color: t.textDim, marginTop: '.5rem', fontFamily: "'DM Mono',monospace", background: t.bg3, border: `1px solid ${t.border}`, padding: '.2rem .6rem' }}>Max file size: 500MB</p>}
+                {!isUploading && <p style={{ fontSize: '.65rem', color: t.textDim, marginTop: '.5rem', fontFamily: "'DM Mono',monospace", background: t.bg3, border: `1px solid ${t.border}`, padding: '.2rem .6rem' }}>Max file size: 5MB</p>}
               </div>
             </div>
           </div>

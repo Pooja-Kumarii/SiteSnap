@@ -7,6 +7,8 @@ interface Env {
   DATABASE_URL: string;
 }
 
+const MAX_ZIP_SIZE = 5 * 1024 * 1024; // 5MB max on free plan
+
 function getContentType(ext: string): string {
   const types: Record<string, string> = {
     ".html": "text/html", ".htm": "text/html", ".css": "text/css",
@@ -86,33 +88,21 @@ export default {
       if (!match) {
         return new Response("Not found", { status: 404 });
       }
-
       const siteId = match[1];
       let filePath = match[2] || "/";
       if (filePath.endsWith("/")) filePath += "index.html";
-
       const r2Key = `sites/${siteId}${filePath}`;
       const object = await env.R2.get(r2Key);
-
       if (!object) {
         const fallback = await env.R2.get(`sites/${siteId}/index.html`);
-        if (!fallback) {
-          return new Response("File not found", { status: 404 });
-        }
+        if (!fallback) return new Response("File not found", { status: 404 });
         return new Response(fallback.body, {
-          headers: {
-            "Content-Type": "text/html",
-            "Cache-Control": "public, max-age=3600",
-          },
+          headers: { "Content-Type": "text/html", "Cache-Control": "public, max-age=3600" },
         });
       }
-
       const ext = filePath.substring(filePath.lastIndexOf(".")).toLowerCase();
       return new Response(object.body, {
-        headers: {
-          "Content-Type": getContentType(ext),
-          "Cache-Control": "public, max-age=3600",
-        },
+        headers: { "Content-Type": getContentType(ext), "Cache-Control": "public, max-age=3600" },
       });
     }
 
@@ -152,6 +142,18 @@ export default {
 
       const zipData = new Uint8Array(await tempObject.arrayBuffer());
 
+      // ── Check file size BEFORE processing ────────────────────────────────
+      if (zipData.length > MAX_ZIP_SIZE) {
+        await env.R2.delete(r2Key);
+        return new Response(JSON.stringify({
+          error: "file_too_large",
+          message: `Your ZIP file is ${(zipData.length / 1024 / 1024).toFixed(1)}MB. Maximum allowed size is 5MB. Please reduce your site size by removing unused images or plugins, then export again.`
+        }), {
+          status: 413,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
       const v = validateZip(zipData);
       if (!v.valid) {
         await env.R2.delete(r2Key);
@@ -190,11 +192,9 @@ export default {
           let relKey = key;
           if (rootPrefix && relKey.startsWith(rootPrefix)) relKey = relKey.slice(rootPrefix.length);
           if (!relKey) return;
-
           const r2FileKey = `sites/${siteId}/${relKey}`;
           const ext = relKey.substring(relKey.lastIndexOf(".")).toLowerCase();
           let fileData: Uint8Array = files[key];
-
           if (ext === ".html" || ext === ".htm") {
             const rewritten = rewriteHtml(strFromU8(fileData), base);
             fileData = new TextEncoder().encode(rewritten);
@@ -202,7 +202,6 @@ export default {
             const rewritten = rewriteCss(strFromU8(fileData), base);
             fileData = new TextEncoder().encode(rewritten);
           }
-
           await env.R2.put(r2FileKey, fileData, {
             httpMetadata: { contentType: getContentType(ext) }
           });
@@ -212,7 +211,6 @@ export default {
       await env.R2.delete(r2Key);
 
       const siteUrl = `${workerBase}/sites/${siteId}/`;
-
       return new Response(JSON.stringify({
         id: siteId,
         name: siteName,
