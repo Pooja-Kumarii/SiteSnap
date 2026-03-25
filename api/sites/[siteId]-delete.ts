@@ -9,9 +9,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const user = requireAuth(req.headers.authorization);
   if (!user) return res.status(401).json({ error: "Not authenticated." });
 
-  // ✅ FIX: use req.query.id — this file is named [id].ts so Vercel sets req.query.id
+  // ✅ File is named [id].ts → Vercel sets req.query.id
   const { id } = req.query;
-  if (!id || !isValidUUID(id as string)) return res.status(400).json({ error: "Invalid site ID." });
+  if (!id || !isValidUUID(id as string)) {
+    return res.status(400).json({ error: "Invalid site ID." });
+  }
 
   try {
     const r = await pool.query(
@@ -20,12 +22,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
     if (!r.rows.length) return res.status(404).json({ error: "Site not found." });
 
-    // Delete files from R2
+    // Delete all files from R2
     await deleteFromR2(`sites/${id}/`);
 
-    res.json({ success: true });
+    return res.json({ success: true });
   } catch (e) {
     console.error("Delete error:", e);
-    res.status(500).json({ error: "Failed to delete site." });
+    return res.status(500).json({ error: "Failed to delete site." });
   }
 }
