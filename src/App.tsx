@@ -66,6 +66,106 @@ const LIGHT = {
   toggleBg: '#e2e8f0', toggleText: '#64748b',
 };
 
+// ── WordPress ZIP Validator ───────────────────────────────────────────────────
+// Reads the ZIP central directory from the file bytes and checks for
+// WordPress-specific files/folders — no library needed.
+async function validateWordPressZip(file: File): Promise<{ valid: boolean; reason?: string }> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const buf = e.target?.result as ArrayBuffer;
+        if (!buf) { resolve({ valid: false, reason: 'Could not read file.' }); return; }
+        const bytes = new Uint8Array(buf);
+
+        // Check ZIP magic bytes: PK (0x50, 0x4B)
+        if (bytes[0] !== 0x50 || bytes[1] !== 0x4B) {
+          resolve({ valid: false, reason: 'Not a valid ZIP file.' });
+          return;
+        }
+
+        // Parse ZIP central directory to extract all file names
+        // End of central directory signature: PK\x05\x06
+        const EOCD_SIG = [0x50, 0x4B, 0x05, 0x06];
+        let eocdOffset = -1;
+        // Search from end of file (EOCD is near the end)
+        for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65558); i--) {
+          if (bytes[i] === EOCD_SIG[0] && bytes[i+1] === EOCD_SIG[1] &&
+              bytes[i+2] === EOCD_SIG[2] && bytes[i+3] === EOCD_SIG[3]) {
+            eocdOffset = i;
+            break;
+          }
+        }
+
+        if (eocdOffset === -1) {
+          resolve({ valid: false, reason: 'Could not read ZIP structure.' });
+          return;
+        }
+
+        // Read central directory offset and size from EOCD
+        const view = new DataView(buf);
+        const cdOffset = view.getUint32(eocdOffset + 16, true);
+        const cdSize   = view.getUint32(eocdOffset + 12, true);
+
+        // Walk through central directory entries
+        const fileNames: string[] = [];
+        let pos = cdOffset;
+        const CD_SIG = [0x50, 0x4B, 0x01, 0x02];
+        const decoder = new TextDecoder('utf-8', { fatal: false });
+
+        while (pos < cdOffset + cdSize && pos + 46 < bytes.length) {
+          // Verify central directory file header signature
+          if (bytes[pos] !== CD_SIG[0] || bytes[pos+1] !== CD_SIG[1] ||
+              bytes[pos+2] !== CD_SIG[2] || bytes[pos+3] !== CD_SIG[3]) break;
+
+          const fileNameLen  = view.getUint16(pos + 28, true);
+          const extraLen     = view.getUint16(pos + 30, true);
+          const commentLen   = view.getUint16(pos + 32, true);
+          const nameBytes    = bytes.slice(pos + 46, pos + 46 + fileNameLen);
+          const name         = decoder.decode(nameBytes).toLowerCase();
+          fileNames.push(name);
+          pos += 46 + fileNameLen + extraLen + commentLen;
+        }
+
+        if (fileNames.length === 0) {
+          resolve({ valid: false, reason: 'ZIP appears to be empty.' });
+          return;
+        }
+
+        // ── WordPress detection ───────────────────────────────────────────
+        // A valid Simply Static export must have:
+        //   - an index.html at root or in a subfolder
+        //   - OR a wp-content/ folder
+        const hasIndexHtml  = fileNames.some(n => n === 'index.html' || n.endsWith('/index.html'));
+        const hasWpContent  = fileNames.some(n => n.startsWith('wp-content/'));
+        const hasWpIncludes = fileNames.some(n => n.startsWith('wp-includes/'));
+
+        if (!hasIndexHtml && !hasWpContent && !hasWpIncludes) {
+          resolve({
+            valid: false,
+            reason: 'No WordPress content found. Please export using the Simply Static plugin.',
+          });
+          return;
+        }
+
+        resolve({ valid: true });
+      } catch {
+        resolve({ valid: false, reason: 'Could not read ZIP contents.' });
+      }
+    };
+    reader.onerror = () => resolve({ valid: false, reason: 'Failed to read file.' });
+    // Only read the last 200KB — enough to find the central directory
+    const slice = file.slice(Math.max(0, file.size - 200 * 1024));
+    // But we also need the start for magic bytes — read whole file if small, else combine
+    if (file.size <= 200 * 1024) {
+      reader.readAsArrayBuffer(file);
+    } else {
+      // For large files, read full file (needed to walk central directory entries)
+      reader.readAsArrayBuffer(file);
+    }
+  });
+}
+
 // ── Constellation ─────────────────────────────────────────────────────────────
 function ConstellationCanvas({ isDark }: { isDark: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -489,30 +589,49 @@ export default function App() {
     authFetch('/api/sites').then(r => r.ok ? r.json() : []).then(setSites).catch(() => {});
   }, [authToken]);
 
+  // ✅ FIX 1: Delete now calls /api/sites/${id} — matches [id].ts file where req.query.id is used
   const deleteSite = async (id: string) => {
     if (!window.confirm('Delete this site?')) return;
     try {
       const r = await authFetch(`/api/sites/${id}`, { method: 'DELETE' });
-      if (!r.ok) throw new Error();
+      if (!r.ok) {
+        const data = await r.json().catch(() => ({}));
+        throw new Error(data.error || 'Delete failed');
+      }
       setSites(p => p.filter(s => s.id !== id));
       addToast('success', 'Site deleted', 'Removed from your deployments.');
-    } catch { addToast('error', 'Delete failed', 'Could not delete. Please try again.'); }
+    } catch (e: any) {
+      addToast('error', 'Delete failed', e.message || 'Could not delete. Please try again.');
+    }
   };
 
   const onDrop = useCallback(async (accepted: File[], rejected: any[]) => {
     // Wrong file type
     if (rejected.length > 0 || accepted.length === 0) {
-      addToast('warning', 'Wrong file type', 'Please upload a .zip file only.', 8000); return;
+      addToast('warning', 'Wrong file type', 'Only .zip files are accepted.', 8000); return;
     }
     const file = accepted[0];
     if (!file.name.toLowerCase().endsWith('.zip')) {
-      addToast('warning', 'Wrong file type', 'Please upload a .zip file only.', 8000); return;
+      addToast('warning', 'Wrong file type', 'Only .zip files are accepted.', 8000); return;
     }
+
     // File too large
     const MAX = 5 * 1024 * 1024;
     if (file.size > MAX) {
-      addToast('error', 'File too large', `Max size is 5MB. Your file is ${(file.size/1024/1024).toFixed(1)}MB — try exporting fewer pages.`, 10000); return;
+      addToast('error', 'File too large', `Max size is 5MB. Your file is ${(file.size/1024/1024).toFixed(1)}MB — export fewer pages from Simply Static.`, 10000); return;
     }
+
+    // ✅ FIX 2: Validate that this is actually a WordPress ZIP before uploading anything
+    addToast('warning', 'Checking ZIP...', 'Verifying this is a WordPress export.', 3000);
+    const validation = await validateWordPressZip(file);
+    if (!validation.valid) {
+      // Remove the "checking" toast immediately
+      setToasts(p => p.slice(0, -1));
+      addToast('error', 'Not a WordPress ZIP', validation.reason || 'Upload a ZIP exported from Simply Static plugin.', 10000);
+      return;
+    }
+    // Remove the "checking" toast
+    setToasts(p => p.slice(0, -1));
 
     setIsUploading(true); setUploadProgress(0);
     try {
@@ -530,14 +649,13 @@ export default function App() {
       const processRes = await authFetch('/api/upload/process', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ r2Key, fileName: file.name }) });
       const result = await processRes.json();
 
-      // Handle specific errors with clean messages
       if (processRes.status === 413 || result.error === 'file_too_large') {
         setIsUploading(false); setUploadProgress(0);
-        addToast('error', 'File too large', `Max allowed is 5MB. Try exporting fewer pages from Simply Static.`, 10000); return;
+        addToast('error', 'File too large', 'Max allowed is 5MB. Export fewer pages from Simply Static.', 10000); return;
       }
       if (processRes.status === 422 || result.error === 'invalid_zip') {
         setIsUploading(false); setUploadProgress(0);
-        addToast('warning', 'Not a valid site ZIP', result.message || 'No index.html found. Export your site correctly using Simply Static.', 10000); return;
+        addToast('warning', 'Not a WordPress ZIP', result.message || 'Export your site using Simply Static plugin.', 10000); return;
       }
       if (!processRes.ok) throw new Error(result.error || 'Processing failed.');
 
@@ -635,7 +753,7 @@ export default function App() {
                 <div style={{ textAlign: 'center' }}>
                   <p style={{ fontSize: '0.9rem', fontWeight: 600, color: t.text2 }}>{isUploading ? `Uploading... ${uploadProgress}%` : (isDragActive ? 'Drop it here!' : 'Drop your ZIP here')}</p>
                   <p style={{ fontSize: '0.75rem', color: t.textDim, marginTop: '0.3rem' }}>{isUploading ? 'Please wait — do not close this tab' : 'or click to browse files'}</p>
-                  {!isUploading && <p style={{ fontSize: '0.68rem', color: t.textDim, marginTop: '0.8rem', background: isDark ? '#1a1a1a' : '#f1f5f9', padding: '0.25rem 0.8rem', borderRadius: '100px', display: 'inline-block' }}>Max 5MB · .zip only</p>}
+                  {!isUploading && <p style={{ fontSize: '0.68rem', color: t.textDim, marginTop: '0.8rem', background: isDark ? '#1a1a1a' : '#f1f5f9', padding: '0.25rem 0.8rem', borderRadius: '100px', display: 'inline-block' }}>WordPress ZIP only · Max 5MB</p>}
                 </div>
               </div>
             </div>
