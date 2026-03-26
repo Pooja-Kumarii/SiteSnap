@@ -6,12 +6,23 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { motion, AnimatePresence } from 'motion/react';
-import { Upload, Copy, Check, History, ExternalLink, Trash2, Loader2, ArrowRight,
-         CheckCircle, XCircle, AlertTriangle, LogOut, User, Moon, Sun, Mail, RefreshCw } from 'lucide-react';
+import {
+  Upload, Copy, Check, History, ExternalLink, Trash2, Loader2, ArrowRight,
+  CheckCircle, XCircle, AlertTriangle, LogOut, User, Moon, Sun,
+} from 'lucide-react';
+import {
+  ClerkProvider,
+  SignIn,
+  SignUp,
+  useAuth,
+  useUser,
+  UserButton,
+} from '@clerk/clerk-react';
 
-interface Site     { id: string; name: string; created_at: string; url: string; }
-interface Toast    { id: string; type: 'success' | 'error' | 'warning'; title: string; message: string; }
-interface AuthUser { id: string; email: string; }
+const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string;
+
+interface Site  { id: string; name: string; created_at: string; url: string; }
+interface Toast { id: string; type: 'success' | 'error' | 'warning'; title: string; message: string; }
 
 const DARK = {
   bg:'#0a0a0a',bg2:'#111111',bg3:'#1a1a1a',bg4:'#0d0d0d',
@@ -72,8 +83,8 @@ async function validateWordPressZip(file: File): Promise<{ valid: boolean; reaso
         if (eocdOffset === -1) { resolve({ valid: false, reason: 'Could not read ZIP structure.' }); return; }
         const view = new DataView(buf);
         const cdOffset = view.getUint32(eocdOffset + 16, true);
-        const cdSize = view.getUint32(eocdOffset + 12, true);
-        const decoder = new TextDecoder('utf-8', { fatal: false });
+        const cdSize   = view.getUint32(eocdOffset + 12, true);
+        const decoder  = new TextDecoder('utf-8', { fatal: false });
         const fileNames: string[] = [];
         let pos = cdOffset;
         while (pos < cdOffset + cdSize && pos + 46 < bytes.length) {
@@ -81,13 +92,13 @@ async function validateWordPressZip(file: File): Promise<{ valid: boolean; reaso
           const fnLen = view.getUint16(pos + 28, true);
           const exLen = view.getUint16(pos + 30, true);
           const cmLen = view.getUint16(pos + 32, true);
-          const name = decoder.decode(bytes.slice(pos + 46, pos + 46 + fnLen)).toLowerCase();
+          const name  = decoder.decode(bytes.slice(pos + 46, pos + 46 + fnLen)).toLowerCase();
           fileNames.push(name);
           pos += 46 + fnLen + exLen + cmLen;
         }
         if (fileNames.length === 0) { resolve({ valid: false, reason: 'ZIP appears to be empty.' }); return; }
-        const hasIndex = fileNames.some(n => n === 'index.html' || n.endsWith('/index.html'));
-        const hasWpContent = fileNames.some(n => n.startsWith('wp-content/'));
+        const hasIndex      = fileNames.some(n => n === 'index.html' || n.endsWith('/index.html'));
+        const hasWpContent  = fileNames.some(n => n.startsWith('wp-content/'));
         const hasWpIncludes = fileNames.some(n => n.startsWith('wp-includes/'));
         if (!hasIndex && !hasWpContent && !hasWpIncludes) {
           resolve({ valid: false, reason: 'No WordPress content found. Export using Simply Static plugin.' }); return;
@@ -193,178 +204,78 @@ function ChainLogo({size=32,color='#0ea5e9'}:{size?:number;color?:string}){
   );
 }
 
-function CheckEmailScreen({email,isDark,onToggleTheme,onBack}:{email:string;isDark:boolean;onToggleTheme:()=>void;onBack:()=>void}){
+// ── Auth Page (Clerk Sign In / Sign Up) ────────────────────────────────────────
+function AuthPage({isDark,onToggleTheme,mode}:{isDark:boolean;onToggleTheme:()=>void;mode:'signIn'|'signUp'}){
   const t=isDark?DARK:LIGHT;
-  const [resending,setResending]=useState(false);
-  const [resent,setResent]=useState(false);
-  const resendEmail=async()=>{
-    setResending(true);
-    try{
-      await fetch('/api/auth/resend-verification',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
-      setResent(true);setTimeout(()=>setResent(false),5000);
-    }catch{}
-    setResending(false);
+  const [currentMode, setCurrentMode] = useState(mode);
+
+  // Clerk appearance customization to match SiteSnap design
+  const appearance = {
+    variables: {
+      colorPrimary: '#0ea5e9',
+      colorBackground: t.panelBg,
+      colorText: t.text,
+      colorTextSecondary: t.textMuted,
+      colorInputBackground: t.inputBg,
+      colorInputText: t.text,
+      borderRadius: '8px',
+      fontFamily: "'Inter', sans-serif",
+    },
+    elements: {
+      card: { background: t.panelBg, border: `1px solid ${t.border}`, boxShadow: isDark ? '0 24px 64px rgba(0,0,0,0.5)' : '0 24px 64px rgba(0,0,0,0.08)', borderRadius: '16px' },
+      headerTitle: { color: t.text2, fontWeight: 800, letterSpacing: '-0.04em' },
+      headerSubtitle: { color: t.textMuted },
+      socialButtonsBlockButton: { background: t.bg3, border: `1px solid ${t.border}`, color: t.text },
+      formFieldLabel: { color: t.textMuted, fontSize: '0.75rem', fontWeight: 500 },
+      formFieldInput: { background: t.inputBg, border: `1.5px solid ${t.border}`, color: t.text, borderRadius: '8px' },
+      footerActionText: { color: t.textMuted },
+      footerActionLink: { color: t.accent, fontWeight: 600 },
+      formButtonPrimary: { background: t.accent, fontFamily: "'Inter',sans-serif", fontWeight: 600, borderRadius: '8px', boxShadow: 'none' },
+      dividerLine: { background: t.border },
+      dividerText: { color: t.textDim },
+    },
   };
-  return(
+
+  return (
     <div style={{minHeight:'100vh',background:t.bg,display:'flex',flexDirection:'column',fontFamily:"'Inter',sans-serif",transition:'background 0.3s'}}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');*{box-sizing:border-box;}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');*{box-sizing:border-box;}`}</style>
       <ConstellationCanvas isDark={isDark}/>
       <nav style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'1.2rem 3rem',borderBottom:`1px solid ${t.border}`,background:t.navBg,backdropFilter:'blur(20px)',position:'sticky',top:0,zIndex:100}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}><ChainLogo size={32} color={t.accent}/><span style={{fontSize:'1rem',fontWeight:700,color:t.text2,letterSpacing:'-0.03em'}}>SiteSnap</span></div>
         <ThemeToggle isDark={isDark} onToggle={onToggleTheme}/>
       </nav>
       <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',padding:'3rem 1.5rem',position:'relative',zIndex:1}}>
-        <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} transition={{duration:0.5}} style={{width:'100%',maxWidth:420}}>
-          <div style={{background:t.panelBg,border:`1px solid ${t.border}`,borderRadius:'16px',padding:'2.5rem 2.2rem',boxShadow:isDark?'0 24px 64px rgba(0,0,0,0.5)':'0 24px 64px rgba(0,0,0,0.08)',position:'relative',overflow:'hidden',textAlign:'center'}}>
-            <div style={{position:'absolute',top:0,left:0,right:0,height:'2px',background:`linear-gradient(90deg,transparent,${t.accent},transparent)`}}/>
-            <div style={{width:64,height:64,borderRadius:'16px',background:isDark?'rgba(14,165,233,0.15)':'rgba(14,165,233,0.1)',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 1.5rem'}}>
-              <Mail size={28} color={t.accent}/>
-            </div>
-            <h1 style={{fontSize:'1.5rem',fontWeight:800,color:t.text2,letterSpacing:'-0.04em',margin:'0 0 0.6rem'}}>Check your email</h1>
-            <p style={{fontSize:'0.88rem',color:t.textMuted,lineHeight:1.7,margin:'0 0 1.5rem'}}>We sent a verification link to<br/><strong style={{color:t.text}}>{email}</strong></p>
-            <div style={{background:isDark?'rgba(14,165,233,0.08)':'rgba(14,165,233,0.05)',border:`1px solid rgba(14,165,233,0.2)`,borderRadius:'10px',padding:'1rem 1.2rem',marginBottom:'1.5rem',textAlign:'left'}}>
-              <p style={{margin:0,fontSize:'0.8rem',color:t.textMuted,lineHeight:1.7}}>1. Open your email inbox<br/>2. Click <strong style={{color:t.text}}>"Verify Email Address"</strong><br/>3. You'll be logged in automatically ✓</p>
-            </div>
-            {resent&&(
-              <motion.div initial={{opacity:0,y:-8}} animate={{opacity:1,y:0}}
-                style={{background:t.successBg,border:`1px solid ${t.successBorder}`,color:t.success,padding:'0.7rem 1rem',fontSize:'0.82rem',marginBottom:'1rem',borderRadius:'8px',display:'flex',alignItems:'center',gap:8}}>
-                <CheckCircle size={14}/> Email resent! Check your inbox.
-              </motion.div>
-            )}
-            <button onClick={resendEmail} disabled={resending}
-              style={{width:'100%',background:'transparent',border:`1px solid ${t.border2}`,color:t.textMuted,padding:'0.75rem',fontFamily:"'Inter',sans-serif",fontWeight:500,fontSize:'0.85rem',cursor:resending?'not-allowed':'pointer',borderRadius:'8px',display:'flex',alignItems:'center',justifyContent:'center',gap:8,marginBottom:'0.8rem',transition:'all 0.2s',opacity:resending?0.6:1}}>
-              {resending?<Loader2 size={14} style={{animation:'spin 1s linear infinite'}}/>:<RefreshCw size={14}/>}
-              {resending?'Sending...':'Resend verification email'}
-            </button>
-            <button onClick={onBack} style={{width:'100%',background:'transparent',border:'none',color:t.textDim,padding:'0.5rem',fontFamily:"'Inter',sans-serif",fontSize:'0.8rem',cursor:'pointer'}}>← Back to sign in</button>
+        <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} transition={{duration:0.5}} style={{width:'100%',maxWidth:480}}>
+          {/* Tab toggle */}
+          <div style={{display:'flex',background:t.bg3,borderRadius:'10px',padding:'3px',marginBottom:'1.5rem'}}>
+            {(['signIn','signUp'] as const).map((m,i)=>(
+              <button key={m} onClick={()=>setCurrentMode(m)}
+                style={{flex:1,padding:'0.55rem',fontFamily:"'Inter',sans-serif",fontWeight:600,fontSize:'0.82rem',cursor:'pointer',border:'none',background:currentMode===m?t.accent:'transparent',color:currentMode===m?'#fff':t.textMuted,borderRadius:'7px',transition:'all 0.2s'}}>
+                {i===0?'Sign In':'Sign Up'}
+              </button>
+            ))}
           </div>
-          <p style={{textAlign:'center',marginTop:'1rem',fontSize:'0.68rem',color:t.textDim}}>Link expires in 24 hours · Check spam if not received</p>
+          {currentMode==='signIn'
+            ? <SignIn appearance={appearance} routing="hash" afterSignInUrl="/" />
+            : <SignUp appearance={appearance} routing="hash" afterSignUpUrl="/" />
+          }
+          <p style={{textAlign:'center',marginTop:'1rem',fontSize:'0.68rem',color:t.textDim}}>🔒 Secured by Clerk · Email verified · Data never sold</p>
         </motion.div>
       </div>
     </div>
   );
 }
 
-function AuthPage({isDark,onToggleTheme,onAuth,onNeedsVerification}:{isDark:boolean;onToggleTheme:()=>void;onAuth:(user:AuthUser,token:string)=>void;onNeedsVerification:(email:string)=>void}){
-  const t=isDark?DARK:LIGHT;
-  const[isLogin,setIsLogin]=useState(true);
-  const[email,setEmail]=useState('');
-  const[password,setPassword]=useState('');
-  const[error,setError]=useState('');
-  const[loading,setLoading]=useState(false);
-  const[focused,setFocused]=useState<string|null>(null);
-
-  useEffect(()=>{
-    const params=new URLSearchParams(window.location.search);
-    const verified=params.get('verified');
-    const token=params.get('token');
-    const emailParam=params.get('email');
-    const uid=params.get('uid');
-    if((verified==='success'||verified==='already')&&token&&emailParam&&uid){
-      localStorage.setItem('sitesnap-token',token);
-      const user={id:uid,email:decodeURIComponent(emailParam)};
-      localStorage.setItem('sitesnap-user',JSON.stringify(user));
-      window.history.replaceState({},'','/');
-      onAuth(user,token);return;
-    }
-    if(verified==='expired'){setError('Verification link expired. Please sign up again.');setIsLogin(false);}
-    if(verified==='invalid'){setError('Invalid verification link. Please sign up again.');setIsLogin(false);}
-    if(verified==='error'){setError('Verification failed. Please try again.');}
-    if(verified)window.history.replaceState({},'','/');
-  },[]);
-
-  const handleSubmit=async()=>{
-    setError('');
-    if(!email.trim()){setError('Please enter your email address.');return;}
-    if(!password.trim()){setError('Please enter your password.');return;}
-    if(!isLogin&&password.length<8){setError('Password must be at least 8 characters.');return;}
-    setLoading(true);
-    try{
-      const res=await fetch(isLogin?'/api/auth/login':'/api/auth/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email.trim(),password})});
-      const data=await res.json();
-      if(res.status===403&&data.error==='email_not_verified'){setLoading(false);onNeedsVerification(email.trim());return;}
-      if(data.needsVerification){setLoading(false);onNeedsVerification(email.trim());return;}
-      if(!res.ok){setError(data.error||'Something went wrong.');setLoading(false);return;}
-      localStorage.setItem('sitesnap-token',data.token);
-      localStorage.setItem('sitesnap-user',JSON.stringify(data.user));
-      onAuth(data.user,data.token);
-    }catch{setError('Cannot connect to server.');}
-    setLoading(false);
-  };
-
-  const inputStyle=(field:string):React.CSSProperties=>({
-    width:'100%',background:t.inputBg,border:`1.5px solid ${focused===field?t.accent:t.border}`,
-    padding:'0.75rem 1rem',fontFamily:"'Inter',sans-serif",fontSize:'0.9rem',
-    color:t.text,outline:'none',borderRadius:'8px',transition:'border-color 0.2s',boxSizing:'border-box',
-  });
-
-  return(
-    <div style={{minHeight:'100vh',background:t.bg,display:'flex',flexDirection:'column',fontFamily:"'Inter',sans-serif",transition:'background 0.3s'}}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');*{box-sizing:border-box;}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}input::placeholder{color:${isDark?'#2a2a2a':'#cbd5e1'};}`}</style>
-      <ConstellationCanvas isDark={isDark}/>
-      <nav style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'1.2rem 3rem',borderBottom:`1px solid ${t.border}`,background:t.navBg,backdropFilter:'blur(20px)',position:'sticky',top:0,zIndex:100}}>
-        <div style={{display:'flex',alignItems:'center',gap:10}}><ChainLogo size={32} color={t.accent}/><span style={{fontSize:'1rem',fontWeight:700,color:t.text2,letterSpacing:'-0.03em'}}>SiteSnap</span></div>
-        <ThemeToggle isDark={isDark} onToggle={onToggleTheme}/>
-      </nav>
-      <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',padding:'3rem 1.5rem',position:'relative',zIndex:1}}>
-        <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} transition={{duration:0.5}} style={{width:'100%',maxWidth:420}}>
-          <div style={{background:t.panelBg,border:`1px solid ${t.border}`,borderRadius:'16px',padding:'2.5rem 2.2rem',boxShadow:isDark?'0 24px 64px rgba(0,0,0,0.5)':'0 24px 64px rgba(0,0,0,0.08)',position:'relative',overflow:'hidden'}}>
-            <div style={{position:'absolute',top:0,left:0,right:0,height:'2px',background:`linear-gradient(90deg,transparent,${t.accent},transparent)`}}/>
-            <div style={{textAlign:'center',marginBottom:'2rem'}}>
-              <ChainLogo size={44} color={t.accent}/>
-              <h1 style={{fontSize:'1.6rem',fontWeight:800,color:t.text2,letterSpacing:'-0.04em',margin:'1rem 0 0.4rem'}}>{isLogin?'Welcome back':'Create account'}</h1>
-              <p style={{fontSize:'0.85rem',color:t.textMuted}}>{isLogin?'Sign in to your SiteSnap account.':'Free forever. No credit card required.'}</p>
-            </div>
-            <div style={{display:'flex',background:t.bg3,borderRadius:'8px',padding:'3px',marginBottom:'1.5rem'}}>
-              {['Sign In','Sign Up'].map((label,i)=>(
-                <button key={label} onClick={()=>{setIsLogin(i===0);setError('');setEmail('');setPassword('');}}
-                  style={{flex:1,padding:'0.55rem',fontFamily:"'Inter',sans-serif",fontWeight:600,fontSize:'0.82rem',cursor:'pointer',border:'none',background:(i===0)===isLogin?t.accent:'transparent',color:(i===0)===isLogin?'#fff':t.textMuted,borderRadius:'6px',transition:'all 0.2s'}}>
-                  {label}
-                </button>
-              ))}
-            </div>
-            <AnimatePresence>
-              {error&&(
-                <motion.div initial={{opacity:0,y:-8}} animate={{opacity:1,y:0}} exit={{opacity:0}}
-                  style={{background:t.errorBg,border:`1px solid ${t.errorBorder}`,color:t.error,padding:'0.7rem 1rem',fontSize:'0.82rem',marginBottom:'1.2rem',display:'flex',alignItems:'center',gap:8,borderRadius:'8px'}}>
-                  <XCircle size={14} style={{flexShrink:0}}/>{error}
-                </motion.div>
-              )}
-            </AnimatePresence>
-            <div style={{marginBottom:'1rem'}}>
-              <label style={{display:'block',fontSize:'0.75rem',color:t.textMuted,marginBottom:'0.4rem',fontWeight:500}}>Email address</label>
-              <input type="email" value={email} onChange={e=>setEmail(e.target.value)} onFocus={()=>setFocused('email')} onBlur={()=>setFocused(null)} placeholder="you@example.com" style={inputStyle('email')} onKeyDown={e=>e.key==='Enter'&&handleSubmit()}/>
-            </div>
-            <div style={{marginBottom:'1.5rem'}}>
-              <label style={{display:'block',fontSize:'0.75rem',color:t.textMuted,marginBottom:'0.4rem',fontWeight:500}}>Password</label>
-              <input type="password" value={password} onChange={e=>setPassword(e.target.value)} onFocus={()=>setFocused('password')} onBlur={()=>setFocused(null)} placeholder={isLogin?'••••••••':'At least 8 characters'} style={inputStyle('password')} onKeyDown={e=>e.key==='Enter'&&handleSubmit()}/>
-              {!isLogin&&password.length>0&&(
-                <div style={{marginTop:'0.5rem',display:'flex',gap:4,alignItems:'center'}}>
-                  {[1,2,3,4].map(i=><div key={i} style={{flex:1,height:3,background:password.length>=i*2?(password.length>=8?t.success:t.warning):t.border,borderRadius:'2px',transition:'background 0.3s'}}/>)}
-                  <span style={{fontSize:'0.65rem',color:t.textDim,marginLeft:4}}>{password.length<4?'Weak':password.length<8?'Almost':'Good'}</span>
-                </div>
-              )}
-            </div>
-            <button onClick={handleSubmit} disabled={loading}
-              style={{width:'100%',background:t.accent,color:'#fff',border:'none',padding:'0.85rem',fontFamily:"'Inter',sans-serif",fontWeight:600,fontSize:'0.9rem',cursor:loading?'not-allowed':'pointer',borderRadius:'8px',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:loading?0.7:1,transition:'all 0.2s'}}
-              onMouseOver={e=>{if(!loading)e.currentTarget.style.background=t.accentHover;}} onMouseOut={e=>{e.currentTarget.style.background=t.accent;}}>
-              {loading?<Loader2 size={16} style={{animation:'spin 1s linear infinite'}}/>:null}
-              {loading?'Please wait...':(isLogin?'Sign In →':'Create Account →')}
-            </button>
-            <p style={{textAlign:'center',marginTop:'1.2rem',fontSize:'0.82rem',color:t.textMuted}}>
-              {isLogin?"Don't have an account? ":"Already have an account? "}
-              <button onClick={()=>{setIsLogin(!isLogin);setError('');}} style={{background:'none',border:'none',color:t.accent,fontWeight:600,cursor:'pointer',fontFamily:"'Inter',sans-serif",fontSize:'0.82rem'}}>{isLogin?'Sign up free →':'Sign in →'}</button>
-            </p>
-          </div>
-          <p style={{textAlign:'center',marginTop:'1rem',fontSize:'0.68rem',color:t.textDim}}>🔒 Passwords encrypted · Email verified · Data never sold</p>
-        </motion.div>
-      </div>
-    </div>
-  );
-}
-
+// ── Homepage ───────────────────────────────────────────────────────────────────
 function HomePage({onEnterApp,isDark,onToggleTheme}:{onEnterApp:()=>void;isDark:boolean;onToggleTheme:()=>void}){
   const t=isDark?DARK:LIGHT;
+  const { isSignedIn } = useAuth();
+
+  const handleLaunch = () => {
+    sessionStorage.setItem('inApp','1');
+    onEnterApp();
+  };
+
   return(
     <div style={{background:t.bg,minHeight:'100vh',color:t.text,fontFamily:"'Inter',sans-serif",overflowX:'hidden',transition:'background 0.3s'}}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');*{box-sizing:border-box;}@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
@@ -373,7 +284,10 @@ function HomePage({onEnterApp,isDark,onToggleTheme}:{onEnterApp:()=>void;isDark:
         <div style={{display:'flex',alignItems:'center',gap:10}}><ChainLogo size={36} color={t.accent}/><span style={{fontSize:'1.05rem',fontWeight:700,color:t.text2,letterSpacing:'-0.03em'}}>SiteSnap</span></div>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           <ThemeToggle isDark={isDark} onToggle={onToggleTheme}/>
-          <button onClick={()=>{sessionStorage.setItem('inApp','1');onEnterApp();}} style={{background:t.accent,color:'#fff',border:'none',padding:'0.5rem 1.2rem',fontFamily:"'Inter',sans-serif",fontWeight:600,fontSize:'0.82rem',cursor:'pointer',borderRadius:'6px',transition:'background 0.2s'}} onMouseOver={e=>(e.currentTarget.style.background=t.accentHover)} onMouseOut={e=>(e.currentTarget.style.background=t.accent)}>Launch App</button>
+          {isSignedIn
+            ? <button onClick={handleLaunch} style={{background:t.accent,color:'#fff',border:'none',padding:'0.5rem 1.2rem',fontFamily:"'Inter',sans-serif",fontWeight:600,fontSize:'0.82rem',cursor:'pointer',borderRadius:'6px',transition:'background 0.2s'}} onMouseOver={e=>(e.currentTarget.style.background=t.accentHover)} onMouseOut={e=>(e.currentTarget.style.background=t.accent)}>Launch App</button>
+            : <button onClick={handleLaunch} style={{background:t.accent,color:'#fff',border:'none',padding:'0.5rem 1.2rem',fontFamily:"'Inter',sans-serif",fontWeight:600,fontSize:'0.82rem',cursor:'pointer',borderRadius:'6px',transition:'background 0.2s'}} onMouseOver={e=>(e.currentTarget.style.background=t.accentHover)} onMouseOut={e=>(e.currentTarget.style.background=t.accent)}>Get Started</button>
+          }
         </div>
       </nav>
       <section style={{minHeight:'88vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',textAlign:'center',padding:'5rem 2rem 4rem',position:'relative',zIndex:1}}>
@@ -382,7 +296,7 @@ function HomePage({onEnterApp,isDark,onToggleTheme}:{onEnterApp:()=>void;isDark:
         <HeroReveal delay={200} dir="up"><p style={{fontSize:'1.1rem',color:t.textMuted,maxWidth:480,lineHeight:1.8,marginBottom:'2.5rem',fontWeight:400}}>Upload your WordPress ZIP and get a permanent shareable link — without touching a server.</p></HeroReveal>
         <HeroReveal delay={320} dir="up">
           <div style={{display:'flex',gap:12,flexWrap:'wrap',justifyContent:'center'}}>
-            <button onClick={()=>{sessionStorage.setItem('inApp','1');onEnterApp();}} style={{background:t.accent,color:'#fff',border:'none',padding:'0.85rem 2rem',fontFamily:"'Inter',sans-serif",fontWeight:600,fontSize:'0.95rem',cursor:'pointer',borderRadius:'8px',display:'inline-flex',alignItems:'center',gap:8,transition:'all 0.2s',boxShadow:`0 4px 24px rgba(14,165,233,0.3)`}} onMouseOver={e=>{e.currentTarget.style.background=t.accentHover;e.currentTarget.style.transform='translateY(-1px)';}} onMouseOut={e=>{e.currentTarget.style.background=t.accent;e.currentTarget.style.transform='none';}}>Upload Your ZIP <ArrowRight size={16}/></button>
+            <button onClick={handleLaunch} style={{background:t.accent,color:'#fff',border:'none',padding:'0.85rem 2rem',fontFamily:"'Inter',sans-serif",fontWeight:600,fontSize:'0.95rem',cursor:'pointer',borderRadius:'8px',display:'inline-flex',alignItems:'center',gap:8,transition:'all 0.2s',boxShadow:`0 4px 24px rgba(14,165,233,0.3)`}} onMouseOver={e=>{e.currentTarget.style.background=t.accentHover;e.currentTarget.style.transform='translateY(-1px)';}} onMouseOut={e=>{e.currentTarget.style.background=t.accent;e.currentTarget.style.transform='none';}}>Upload Your ZIP <ArrowRight size={16}/></button>
             <button onClick={()=>document.getElementById('hp-how')?.scrollIntoView({behavior:'smooth'})} style={{background:'transparent',color:t.textMuted,border:`1px solid ${t.border2}`,padding:'0.85rem 2rem',fontFamily:"'Inter',sans-serif",fontWeight:500,fontSize:'0.95rem',cursor:'pointer',borderRadius:'8px',transition:'all 0.2s'}} onMouseOver={e=>(e.currentTarget.style.borderColor=t.accent)} onMouseOut={e=>(e.currentTarget.style.borderColor=t.border2)}>See how it works</button>
           </div>
         </HeroReveal>
@@ -397,7 +311,7 @@ function HomePage({onEnterApp,isDark,onToggleTheme}:{onEnterApp:()=>void;isDark:
       <section style={{padding:'6rem 3rem',position:'relative',zIndex:1,borderTop:`1px solid ${t.border}`}}>
         <Reveal dir="up"><div style={{maxWidth:1100,margin:'0 auto'}}><div style={{fontSize:'0.72rem',color:t.accentText,letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:'0.6rem',fontWeight:600}}>Features</div><h2 style={{fontSize:'clamp(1.8rem,4vw,2.8rem)',fontWeight:700,letterSpacing:'-0.04em',marginBottom:'3rem',color:t.text2}}>Everything you need. Nothing you don't.</h2></div></Reveal>
         <div style={{maxWidth:1100,margin:'0 auto',display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))',gap:'1px',background:t.border,border:`1px solid ${t.border}`,borderRadius:'12px',overflow:'hidden'}}>
-          {[{icon:'⚡',title:'Instant Deploy',desc:'Drop your ZIP and go. No config, no CLI.'},{icon:'🔗',title:'Permanent Links',desc:'Every deploy gets a URL that never expires.'},{icon:'📁',title:'Deploy History',desc:'All your deployments in one clean list.'},{icon:'🔒',title:'Secure Auth',desc:'Encrypted passwords. Email verified. JWT protected.'}].map((f,i)=>(
+          {[{icon:'⚡',title:'Instant Deploy',desc:'Drop your ZIP and go. No config, no CLI.'},{icon:'🔗',title:'Permanent Links',desc:'Every deploy gets a URL that never expires.'},{icon:'📁',title:'Deploy History',desc:'All your deployments in one clean list.'},{icon:'🔒',title:'Secure Auth',desc:'Powered by Clerk. Encrypted, verified, trusted.'}].map((f,i)=>(
             <Reveal key={f.title} dir="up" delay={i*60}><div style={{background:t.cardBg,padding:'2rem 1.8rem',display:'flex',flexDirection:'column',gap:'0.8rem',transition:'background 0.2s',height:'100%'}} onMouseOver={e=>(e.currentTarget.style.background=t.cardHover)} onMouseOut={e=>(e.currentTarget.style.background=t.cardBg)}><div style={{fontSize:22}}>{f.icon}</div><div style={{fontSize:'0.95rem',fontWeight:600,color:t.text2}}>{f.title}</div><div style={{fontSize:'0.85rem',color:t.textMuted,lineHeight:1.6}}>{f.desc}</div></div></Reveal>
           ))}
         </div>
@@ -411,7 +325,7 @@ function HomePage({onEnterApp,isDark,onToggleTheme}:{onEnterApp:()=>void;isDark:
         </div>
       </section>
       <section style={{padding:'7rem 3rem',textAlign:'center',position:'relative',zIndex:1,borderTop:`1px solid ${t.border}`}}>
-        <Reveal dir="up"><div style={{maxWidth:560,margin:'0 auto',background:isDark?'rgba(14,165,233,0.05)':'rgba(14,165,233,0.04)',border:`1px solid rgba(14,165,233,0.2)`,borderRadius:'16px',padding:'4rem 3rem'}}><h2 style={{fontSize:'clamp(1.8rem,4vw,2.5rem)',fontWeight:700,letterSpacing:'-0.04em',marginBottom:'1rem',color:t.text2}}>Ready to ship your first site?</h2><p style={{color:t.textMuted,fontSize:'0.95rem',marginBottom:'2rem',lineHeight:1.7}}>Free account. No credit card. Just your ZIP and 30 seconds.</p><button onClick={()=>{sessionStorage.setItem('inApp','1');onEnterApp();}} style={{background:t.accent,color:'#fff',border:'none',padding:'0.9rem 2.2rem',fontFamily:"'Inter',sans-serif",fontWeight:600,fontSize:'0.95rem',cursor:'pointer',borderRadius:'8px',display:'inline-flex',alignItems:'center',gap:8,transition:'all 0.2s',boxShadow:`0 4px 24px rgba(14,165,233,0.3)`}} onMouseOver={e=>{e.currentTarget.style.background=t.accentHover;e.currentTarget.style.transform='translateY(-1px)';}} onMouseOut={e=>{e.currentTarget.style.background=t.accent;e.currentTarget.style.transform='none';}}>Open SiteSnap <ArrowRight size={16}/></button></div></Reveal>
+        <Reveal dir="up"><div style={{maxWidth:560,margin:'0 auto',background:isDark?'rgba(14,165,233,0.05)':'rgba(14,165,233,0.04)',border:`1px solid rgba(14,165,233,0.2)`,borderRadius:'16px',padding:'4rem 3rem'}}><h2 style={{fontSize:'clamp(1.8rem,4vw,2.5rem)',fontWeight:700,letterSpacing:'-0.04em',marginBottom:'1rem',color:t.text2}}>Ready to ship your first site?</h2><p style={{color:t.textMuted,fontSize:'0.95rem',marginBottom:'2rem',lineHeight:1.7}}>Free account. No credit card. Just your ZIP and 30 seconds.</p><button onClick={handleLaunch} style={{background:t.accent,color:'#fff',border:'none',padding:'0.9rem 2.2rem',fontFamily:"'Inter',sans-serif",fontWeight:600,fontSize:'0.95rem',cursor:'pointer',borderRadius:'8px',display:'inline-flex',alignItems:'center',gap:8,transition:'all 0.2s',boxShadow:`0 4px 24px rgba(14,165,233,0.3)`}} onMouseOver={e=>{e.currentTarget.style.background=t.accentHover;e.currentTarget.style.transform='translateY(-1px)';}} onMouseOut={e=>{e.currentTarget.style.background=t.accent;e.currentTarget.style.transform='none';}}>Open SiteSnap <ArrowRight size={16}/></button></div></Reveal>
       </section>
       <footer style={{borderTop:`1px solid ${t.border}`,padding:'1.5rem 3rem',display:'flex',alignItems:'center',justifyContent:'space-between',position:'relative',zIndex:1}}>
         <div style={{display:'flex',alignItems:'center',gap:8}}><ChainLogo size={24} color={t.accent}/><span style={{fontSize:'0.85rem',fontWeight:600,color:t.text2}}>SiteSnap</span></div>
@@ -421,20 +335,12 @@ function HomePage({onEnterApp,isDark,onToggleTheme}:{onEnterApp:()=>void;isDark:
   );
 }
 
-export default function App(){
-  const[isDark,setIsDark]=useState<boolean>(()=>{const s=localStorage.getItem('sitesnap-theme');return s===null?true:s==='dark';});
-  const toggleTheme=()=>setIsDark(p=>{const n=!p;localStorage.setItem('sitesnap-theme',n?'dark':'light');return n;});
+// ── Main App (upload + deploy list) ───────────────────────────────────────────
+function MainApp({isDark,onToggleTheme,onBack}:{isDark:boolean;onToggleTheme:()=>void;onBack:()=>void}){
   const t=isDark?DARK:LIGHT;
+  const { getToken } = useAuth();
+  const { user } = useUser();
 
-  const[authUser,setAuthUser]=useState<AuthUser|null>(()=>{try{const u=localStorage.getItem('sitesnap-user');return u?JSON.parse(u):null;}catch{return null;}});
-  const[authToken,setAuthToken]=useState<string|null>(()=>localStorage.getItem('sitesnap-token'));
-  const[verifyEmail,setVerifyEmail]=useState<string|null>(null);
-
-  const handleAuth=(user:AuthUser,token:string)=>{setAuthUser(user);setAuthToken(token);setVerifyEmail(null);};
-  const handleLogout=()=>{localStorage.removeItem('sitesnap-token');localStorage.removeItem('sitesnap-user');setAuthUser(null);setAuthToken(null);setSites([]);sessionStorage.removeItem('inApp');setShowHome(true);};
-  const authFetch=useCallback((url:string,options:RequestInit={})=>fetch(url,{...options,headers:{...options.headers,'Authorization':`Bearer ${authToken}`}}),[authToken]);
-
-  const[showHome,setShowHome]=useState(()=>!sessionStorage.getItem('inApp'));
   const[sites,setSites]=useState<Site[]>([]);
   const[isUploading,setIsUploading]=useState(false);
   const[uploadProgress,setUploadProgress]=useState(0);
@@ -448,9 +354,20 @@ export default function App(){
   },[]);
   const removeToast=(id:string)=>setToasts(p=>p.filter(x=>x.id!==id));
 
+  // Get auth header using Clerk token
+  const authHeader = useCallback(async () => {
+    const token = await getToken();
+    return token ? `Bearer ${token}` : '';
+  }, [getToken]);
+
+  const authFetch = useCallback(async (url: string, options: RequestInit = {}) => {
+    const auth = await authHeader();
+    return fetch(url, { ...options, headers: { ...options.headers, Authorization: auth } });
+  }, [authHeader]);
+
   useEffect(()=>{
-    if(authToken)authFetch('/api/sites').then(r=>r.ok?r.json():[]).then(setSites).catch(()=>{});
-  },[authToken]);
+    authFetch('/api/sites').then(r=>r.ok?r.json():[]).then(setSites).catch(()=>{});
+  },[]);
 
   const deleteSite=async(id:string)=>{
     if(!window.confirm('Delete this site?'))return;
@@ -493,10 +410,6 @@ export default function App(){
   const{getRootProps,getInputProps,isDragActive}=useDropzone({onDrop,accept:{'application/zip':['.zip']},multiple:false});
   const copyLink=(url:string,id:string)=>{navigator.clipboard.writeText(url);setCopiedId(id);setTimeout(()=>setCopiedId(null),2000);};
 
-  if(verifyEmail)return<CheckEmailScreen email={verifyEmail} isDark={isDark} onToggleTheme={toggleTheme} onBack={()=>setVerifyEmail(null)}/>;
-  if(!authUser)return<AuthPage isDark={isDark} onToggleTheme={toggleTheme} onAuth={handleAuth} onNeedsVerification={email=>setVerifyEmail(email)}/>;
-  if(showHome)return<HomePage onEnterApp={()=>{sessionStorage.setItem('inApp','1');setShowHome(false);}} isDark={isDark} onToggleTheme={toggleTheme}/>;
-
   return(
     <div style={{minHeight:'100vh',background:t.bg,color:t.text,fontFamily:"'Inter',sans-serif",transition:'background 0.3s'}}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');*{box-sizing:border-box;}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}.dep-list::-webkit-scrollbar{width:3px;}.dep-list::-webkit-scrollbar-thumb{background:${t.scrollbar};border-radius:4px;}`}</style>
@@ -504,12 +417,12 @@ export default function App(){
       <ToastContainer toasts={toasts} onRemove={removeToast} isDark={isDark}/>
       <nav style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'1rem 2.5rem',borderBottom:`1px solid ${t.border}`,background:t.navBg,backdropFilter:'blur(20px)',position:'sticky',top:0,zIndex:50,transition:'background 0.3s'}}>
         <div style={{display:'flex',alignItems:'center',gap:'0.8rem'}}>
-          <button onClick={()=>{sessionStorage.removeItem('inApp');setShowHome(true);}} style={{background:'transparent',color:t.textMuted,border:`1px solid ${t.border}`,padding:'0.38rem 0.85rem',fontFamily:"'Inter',sans-serif",fontSize:'0.78rem',fontWeight:500,cursor:'pointer',borderRadius:'6px',transition:'all 0.2s'}}>← Back</button>
+          <button onClick={onBack} style={{background:'transparent',color:t.textMuted,border:`1px solid ${t.border}`,padding:'0.38rem 0.85rem',fontFamily:"'Inter',sans-serif",fontSize:'0.78rem',fontWeight:500,cursor:'pointer',borderRadius:'6px',transition:'all 0.2s'}}>← Back</button>
           <div style={{display:'flex',alignItems:'center',gap:8}}><ChainLogo size={28} color={t.accent}/><span style={{fontSize:'0.9rem',fontWeight:700,color:t.text2,letterSpacing:'-0.03em'}}>SiteSnap</span></div>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:'0.6rem'}}>
-          <ThemeToggle isDark={isDark} onToggle={toggleTheme}/>
-          {authUser&&<div style={{fontSize:'0.72rem',color:t.textMuted,display:'flex',alignItems:'center',gap:5}}><User size={11}/>{authUser.email}</div>}
+          <ThemeToggle isDark={isDark} onToggle={onToggleTheme}/>
+          {user && <div style={{fontSize:'0.72rem',color:t.textMuted,display:'flex',alignItems:'center',gap:5}}><User size={11}/>{user.primaryEmailAddress?.emailAddress}</div>}
           {sites.length>0&&(
             <button onClick={async()=>{
               if(!window.confirm('Delete all sites?'))return;
@@ -519,9 +432,15 @@ export default function App(){
               <Trash2 size={11}/> Delete All
             </button>
           )}
-          <button onClick={handleLogout} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'0.38rem 0.85rem',fontSize:'0.72rem',fontWeight:500,background:'transparent',color:t.textMuted,border:`1px solid ${t.border}`,borderRadius:'6px',cursor:'pointer',fontFamily:"'Inter',sans-serif"}}>
-            <LogOut size={11}/> Logout
-          </button>
+          {/* Clerk UserButton — handles logout, profile, etc. */}
+          <UserButton
+            appearance={{
+              elements: {
+                avatarBox: { width: 28, height: 28 },
+              }
+            }}
+            afterSignOutUrl="/"
+          />
         </div>
       </nav>
       <div style={{maxWidth:1100,margin:'0 auto',padding:'3rem 2rem',position:'relative',zIndex:1}}>
@@ -589,5 +508,52 @@ export default function App(){
         </div>
       </div>
     </div>
+  );
+}
+
+// ── Root App with Clerk Provider ───────────────────────────────────────────────
+function AppInner() {
+  const { isSignedIn, isLoaded } = useAuth();
+  const [isDark, setIsDark] = useState<boolean>(() => {
+    const s = localStorage.getItem('sitesnap-theme');
+    return s === null ? true : s === 'dark';
+  });
+  const toggleTheme = () => setIsDark(p => { const n = !p; localStorage.setItem('sitesnap-theme', n ? 'dark' : 'light'); return n; });
+  const [showHome, setShowHome] = useState(() => !sessionStorage.getItem('inApp'));
+  const [showSignUp, setShowSignUp] = useState(false);
+
+  // Show loading spinner while Clerk initializes
+  if (!isLoaded) {
+    const t = isDark ? DARK : LIGHT;
+    return (
+      <div style={{ minHeight: '100vh', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Loader2 size={32} color={t.accent} style={{ animation: 'spin 1s linear infinite' }} />
+        <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+      </div>
+    );
+  }
+
+  // Not signed in → show auth page
+  if (!isSignedIn) {
+    return <AuthPage isDark={isDark} onToggleTheme={toggleTheme} mode={showSignUp ? 'signUp' : 'signIn'} />;
+  }
+
+  // Signed in, show homepage
+  if (showHome) {
+    return <HomePage onEnterApp={() => { sessionStorage.setItem('inApp', '1'); setShowHome(false); }} isDark={isDark} onToggleTheme={toggleTheme} />;
+  }
+
+  // Signed in, show main app
+  return <MainApp isDark={isDark} onToggleTheme={toggleTheme} onBack={() => { sessionStorage.removeItem('inApp'); setShowHome(true); }} />;
+}
+
+export default function App() {
+  if (!PUBLISHABLE_KEY) {
+    return <div style={{ color: 'red', padding: 32, fontFamily: 'monospace' }}>Missing VITE_CLERK_PUBLISHABLE_KEY in .env</div>;
+  }
+  return (
+    <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
+      <AppInner />
+    </ClerkProvider>
   );
 }

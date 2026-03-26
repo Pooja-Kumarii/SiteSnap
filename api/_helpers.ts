@@ -1,7 +1,6 @@
 import pkg from "pg";
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
+import { createClerkClient } from "@clerk/backend";
 
 const { Pool } = pkg;
 
@@ -9,8 +8,11 @@ const { Pool } = pkg;
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
-  max: 1, // Keep low for serverless
+  max: 1,
 });
+
+// ── Clerk ─────────────────────────────────────────────────────────────────────
+const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY! });
 
 // ── R2 Client ─────────────────────────────────────────────────────────────────
 export const r2 = new S3Client({
@@ -49,7 +51,28 @@ export async function getFromR2(key: string): Promise<Buffer | null> {
   } catch { return null; }
 }
 
-// ── Security helpers ──────────────────────────────────────────────────────────
+// ── Auth helpers (Clerk) ──────────────────────────────────────────────────────
+export async function requireAuth(
+  authHeader: string | undefined
+): Promise<{ userId: string; email: string } | null> {
+  if (!authHeader?.startsWith("Bearer ")) return null;
+  const token = authHeader.split(" ")[1];
+  if (!token || token.length > 2048) return null;
+  try {
+    // Verify Clerk session token
+    const payload = await clerk.verifyToken(token);
+    if (!payload?.sub) return null;
+    // Get email from Clerk user
+    const user = await clerk.users.getUser(payload.sub);
+    const email = user.emailAddresses?.[0]?.emailAddress ?? "";
+    return { userId: payload.sub, email };
+  } catch (e) {
+    console.error("Clerk auth error:", e);
+    return null;
+  }
+}
+
+// ── Sanitize ──────────────────────────────────────────────────────────────────
 export function sanitize(str: string): string {
   return String(str).trim().slice(0, 500).replace(/[<>]/g, "");
 }
@@ -61,28 +84,6 @@ export function isValidPassword(p: string): boolean {
 }
 export function isValidUUID(str: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str);
-}
-
-// ── Auth helpers ──────────────────────────────────────────────────────────────
-export function requireAuth(authHeader: string | undefined): { userId: string; email: string } | null {
-  if (!authHeader?.startsWith("Bearer ")) return null;
-  const token = authHeader.split(" ")[1];
-  if (token.length > 2048) return null;
-  try {
-    return jwt.verify(token, process.env.JWT_SECRET!) as { userId: string; email: string };
-  } catch { return null; }
-}
-
-export async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, 12);
-}
-
-export async function comparePassword(password: string, hash: string): Promise<boolean> {
-  return bcrypt.compare(password, hash);
-}
-
-export function signToken(userId: string, email: string): string {
-  return jwt.sign({ userId, email }, process.env.JWT_SECRET!, { expiresIn: "7d" });
 }
 
 // ── Content type helper ───────────────────────────────────────────────────────

@@ -8,7 +8,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   Object.entries(securityHeaders).forEach(([k, v]) => res.setHeader(k, v));
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const user = requireAuth(req.headers.authorization);
+  // Clerk auth — requireAuth is now async
+  const user = await requireAuth(req.headers.authorization);
   if (!user) return res.status(401).json({ error: "Not authenticated." });
 
   try {
@@ -18,14 +19,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const siteId = uuidv4();
     const siteName = sanitize(fileName.replace(/\.zip$/i, "") || "Untitled Site");
 
-    let workerUrl = (process.env.WORKER_URL || "").trim().replace(/\/$/, "");
+    const workerUrl = (process.env.WORKER_URL || "").trim().replace(/\/$/, "");
     const workerSecret = process.env.WORKER_SECRET;
 
     if (!workerUrl || !workerSecret) {
       return res.status(500).json({ error: "Worker not configured." });
     }
 
-    // Fire and forget — call Worker WITHOUT awaiting
+    // Fire and forget — call Worker without awaiting (avoids Vercel timeout)
     fetch(`${workerUrl}`, {
       method: "POST",
       headers: {
@@ -35,7 +36,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       body: JSON.stringify({ r2Key, fileName, userId: user.userId, siteId }),
     }).catch((err) => console.error("Worker fire-and-forget error:", err));
 
-    // Save to database with correct Worker URL
+    // Save to DB immediately with the correct Worker URL
     const siteUrl = `${workerUrl}/sites/${siteId}/`;
     await pool.query(
       "INSERT INTO sites (id, user_id, name, url) VALUES ($1, $2, $3, $4)",

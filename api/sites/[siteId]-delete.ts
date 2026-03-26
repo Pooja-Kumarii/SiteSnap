@@ -6,10 +6,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method !== "DELETE") return res.status(405).json({ error: "Method not allowed" });
 
-  const user = requireAuth(req.headers.authorization);
+  // Clerk auth — requireAuth is now async
+  const user = await requireAuth(req.headers.authorization);
   if (!user) return res.status(401).json({ error: "Not authenticated." });
 
-  // ✅ File is named [id].ts → Vercel sets req.query.id
   const { id } = req.query;
   if (!id || !isValidUUID(id as string)) {
     return res.status(400).json({ error: "Invalid site ID." });
@@ -22,7 +22,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
     if (!r.rows.length) return res.status(404).json({ error: "Site not found." });
 
-    // Delete all files from R2
     await deleteFromR2(`sites/${id}/`);
 
     return res.json({ success: true });
