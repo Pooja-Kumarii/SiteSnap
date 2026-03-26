@@ -16,6 +16,7 @@ import {
   SignUp,
   useAuth,
   useUser,
+  useClerk,
   UserButton,
 } from '@clerk/clerk-react';
 
@@ -195,6 +196,43 @@ function ThemeToggle({isDark,onToggle}:{isDark:boolean;onToggle:()=>void}){
   );
 }
 
+// ── Logout Confirmation Modal ──────────────────────────────────────────────────
+function LogoutModal({isDark,onConfirm,onCancel}:{isDark:boolean;onConfirm:()=>void;onCancel:()=>void}){
+  const t=isDark?DARK:LIGHT;
+  return(
+    <AnimatePresence>
+      <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
+        style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',backdropFilter:'blur(6px)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:'1rem'}}
+        onClick={onCancel}>
+        <motion.div initial={{opacity:0,scale:0.92,y:16}} animate={{opacity:1,scale:1,y:0}} exit={{opacity:0,scale:0.92,y:16}} transition={{type:'spring',damping:28,stiffness:380}}
+          onClick={e=>e.stopPropagation()}
+          style={{background:t.panelBg,border:`1px solid ${t.border}`,borderRadius:'16px',padding:'2rem',maxWidth:360,width:'100%',position:'relative',boxShadow:isDark?'0 24px 64px rgba(0,0,0,0.6)':'0 24px 64px rgba(0,0,0,0.12)'}}>
+          <div style={{position:'absolute',top:0,left:0,right:0,height:'2px',background:`linear-gradient(90deg,transparent,${t.error},transparent)`,borderRadius:'16px 16px 0 0'}}/>
+          <div style={{textAlign:'center',marginBottom:'1.5rem'}}>
+            <div style={{width:52,height:52,borderRadius:'12px',background:t.errorBg,border:`1px solid ${t.errorBorder}`,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 1rem'}}>
+              <LogOut size={22} color={t.error}/>
+            </div>
+            <h2 style={{fontSize:'1.1rem',fontWeight:700,color:t.text2,marginBottom:'0.4rem',fontFamily:"'Inter',sans-serif",letterSpacing:'-0.03em'}}>Sign out of SiteSnap?</h2>
+            <p style={{fontSize:'0.83rem',color:t.textMuted,lineHeight:1.6,fontFamily:"'Inter',sans-serif"}}>You'll need to sign back in to access your deployments.</p>
+          </div>
+          <div style={{display:'flex',gap:'0.6rem'}}>
+            <button onClick={onCancel}
+              style={{flex:1,background:'transparent',border:`1px solid ${t.border2}`,color:t.textMuted,padding:'0.7rem',fontFamily:"'Inter',sans-serif",fontWeight:500,fontSize:'0.85rem',cursor:'pointer',borderRadius:'8px',transition:'all 0.2s'}}
+              onMouseOver={e=>(e.currentTarget.style.borderColor=t.accent)} onMouseOut={e=>(e.currentTarget.style.borderColor=t.border2)}>
+              Cancel
+            </button>
+            <button onClick={onConfirm}
+              style={{flex:1,background:t.error,border:`1px solid ${t.errorBorder}`,color:'#fff',padding:'0.7rem',fontFamily:"'Inter',sans-serif",fontWeight:600,fontSize:'0.85rem',cursor:'pointer',borderRadius:'8px',transition:'all 0.2s',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}
+              onMouseOver={e=>(e.currentTarget.style.opacity='0.85')} onMouseOut={e=>(e.currentTarget.style.opacity='1')}>
+              <LogOut size={14}/> Yes, Sign Out
+            </button>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
 function ChainLogo({size=32,color='#0ea5e9'}:{size?:number;color?:string}){
   const p=color;
   return(
@@ -270,20 +308,28 @@ function AuthPage({isDark,onToggleTheme,mode}:{isDark:boolean;onToggleTheme:()=>
 function HomePage({onEnterApp,isDark,onToggleTheme}:{onEnterApp:()=>void;isDark:boolean;onToggleTheme:()=>void}){
   const t=isDark?DARK:LIGHT;
   const { isSignedIn } = useAuth();
+  const { signOut } = useClerk();
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
-  const handleLaunch = () => {
-    sessionStorage.setItem('inApp','1');
-    onEnterApp();
-  };
+  const handleLaunch = () => { sessionStorage.setItem('inApp','1'); onEnterApp(); };
+  const handleLogout = async () => { setShowLogoutModal(false); sessionStorage.removeItem('inApp'); await signOut(); };
 
   return(
     <div style={{background:t.bg,minHeight:'100vh',color:t.text,fontFamily:"'Inter',sans-serif",overflowX:'hidden',transition:'background 0.3s'}}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');*{box-sizing:border-box;}@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+      {showLogoutModal && <LogoutModal isDark={isDark} onConfirm={handleLogout} onCancel={()=>setShowLogoutModal(false)}/>}
       <ConstellationCanvas isDark={isDark}/>
       <nav style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'1.2rem 3rem',borderBottom:`1px solid ${t.border}`,position:'sticky',top:0,background:t.navBg,backdropFilter:'blur(20px)',zIndex:100,transition:'background 0.3s'}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}><ChainLogo size={36} color={t.accent}/><span style={{fontSize:'1.05rem',fontWeight:700,color:t.text2,letterSpacing:'-0.03em'}}>SiteSnap</span></div>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           <ThemeToggle isDark={isDark} onToggle={onToggleTheme}/>
+          {isSignedIn && (
+            <button onClick={()=>setShowLogoutModal(true)}
+              style={{display:'inline-flex',alignItems:'center',gap:5,background:'transparent',color:t.textMuted,border:`1px solid ${t.border}`,padding:'0.4rem 0.9rem',fontFamily:"'Inter',sans-serif",fontWeight:500,fontSize:'0.78rem',cursor:'pointer',borderRadius:'6px',transition:'all 0.2s'}}
+              onMouseOver={e=>{e.currentTarget.style.borderColor=t.error;e.currentTarget.style.color=t.error;}} onMouseOut={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.textMuted;}}>
+              <LogOut size={12}/> Logout
+            </button>
+          )}
           {isSignedIn
             ? <button onClick={handleLaunch} style={{background:t.accent,color:'#fff',border:'none',padding:'0.5rem 1.2rem',fontFamily:"'Inter',sans-serif",fontWeight:600,fontSize:'0.82rem',cursor:'pointer',borderRadius:'6px',transition:'background 0.2s'}} onMouseOver={e=>(e.currentTarget.style.background=t.accentHover)} onMouseOut={e=>(e.currentTarget.style.background=t.accent)}>Launch App</button>
             : <button onClick={handleLaunch} style={{background:t.accent,color:'#fff',border:'none',padding:'0.5rem 1.2rem',fontFamily:"'Inter',sans-serif",fontWeight:600,fontSize:'0.82rem',cursor:'pointer',borderRadius:'6px',transition:'background 0.2s'}} onMouseOver={e=>(e.currentTarget.style.background=t.accentHover)} onMouseOut={e=>(e.currentTarget.style.background=t.accent)}>Get Started</button>
@@ -340,6 +386,10 @@ function MainApp({isDark,onToggleTheme,onBack}:{isDark:boolean;onToggleTheme:()=
   const t=isDark?DARK:LIGHT;
   const { getToken } = useAuth();
   const { user } = useUser();
+  const { signOut } = useClerk();
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+
+  const handleLogout = async () => { setShowLogoutModal(false); sessionStorage.removeItem('inApp'); await signOut(); };
 
   const[sites,setSites]=useState<Site[]>([]);
   const[isUploading,setIsUploading]=useState(false);
@@ -413,6 +463,7 @@ function MainApp({isDark,onToggleTheme,onBack}:{isDark:boolean;onToggleTheme:()=
   return(
     <div style={{minHeight:'100vh',background:t.bg,color:t.text,fontFamily:"'Inter',sans-serif",transition:'background 0.3s'}}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');*{box-sizing:border-box;}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}.dep-list::-webkit-scrollbar{width:3px;}.dep-list::-webkit-scrollbar-thumb{background:${t.scrollbar};border-radius:4px;}`}</style>
+      {showLogoutModal && <LogoutModal isDark={isDark} onConfirm={handleLogout} onCancel={()=>setShowLogoutModal(false)}/>}
       <ConstellationCanvas isDark={isDark}/>
       <ToastContainer toasts={toasts} onRemove={removeToast} isDark={isDark}/>
       <nav style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'1rem 2.5rem',borderBottom:`1px solid ${t.border}`,background:t.navBg,backdropFilter:'blur(20px)',position:'sticky',top:0,zIndex:50,transition:'background 0.3s'}}>
@@ -432,15 +483,11 @@ function MainApp({isDark,onToggleTheme,onBack}:{isDark:boolean;onToggleTheme:()=
               <Trash2 size={11}/> Delete All
             </button>
           )}
-          {/* Clerk UserButton — handles logout, profile, etc. */}
-          <UserButton
-            appearance={{
-              elements: {
-                avatarBox: { width: 28, height: 28 },
-              }
-            }}
-            afterSignOutUrl="/"
-          />
+          <button onClick={()=>setShowLogoutModal(true)}
+            style={{display:'inline-flex',alignItems:'center',gap:5,padding:'0.38rem 0.85rem',fontSize:'0.72rem',fontWeight:500,background:'transparent',color:t.textMuted,border:`1px solid ${t.border}`,borderRadius:'6px',cursor:'pointer',fontFamily:"'Inter',sans-serif",transition:'all 0.2s'}}
+            onMouseOver={e=>{e.currentTarget.style.borderColor=t.error;e.currentTarget.style.color=t.error;}} onMouseOut={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.textMuted;}}>
+            <LogOut size={11}/> Logout
+          </button>
         </div>
       </nav>
       <div style={{maxWidth:1100,margin:'0 auto',padding:'3rem 2rem',position:'relative',zIndex:1}}>
