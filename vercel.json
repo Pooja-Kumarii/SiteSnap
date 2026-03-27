@@ -1,18 +1,19 @@
 {
-    "buildCommand": "npm run build",
-    "outputDirectory": "dist",
-    "rewrites": [
-      { "source": "/api/(.*)", "destination": "/api/$1" },
-      { "source": "/sites/:siteId/:path*", "destination": "/api/sites/:siteId/:path*" },
-      { "source": "/sites/:siteId", "destination": "/api/sites/:siteId/" },
-      { "source": "/(.*)", "destination": "/index.html" }
-    ],
-    "functions": {
-      "api/upload/process.ts": {
-        "maxDuration": 300
-      },
-      "api/upload/presign.ts": {
-        "maxDuration": 30
-      }
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/api/sites/:id", "destination": "/api/sites/delete?id=:id" },
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/sites/:siteId/:path*", "destination": "/api/sites/:siteId/:path*" },
+    { "source": "/sites/:siteId", "destination": "/api/sites/:siteId/" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "functions": {
+    "api/upload/process.ts": {
+      "maxDuration": 300
+    },
+    "api/upload/presign.ts": {
+      "maxDuration": 30
     }
   }
+}
