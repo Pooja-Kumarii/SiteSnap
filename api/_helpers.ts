@@ -1,6 +1,9 @@
 import pkg from "pg";
-import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
-import { createClerkClient } from "@clerk/backend";
+import {
+  S3Client, PutObjectCommand, DeleteObjectCommand,
+  GetObjectCommand, ListObjectsV2Command,
+} from "@aws-sdk/client-s3";
+import { createClerkClient, verifyToken } from "@clerk/backend";
 
 const { Pool } = pkg;
 
@@ -59,10 +62,12 @@ export async function requireAuth(
   const token = authHeader.split(" ")[1];
   if (!token || token.length > 2048) return null;
   try {
-    // Verify Clerk session token
-    const payload = await clerk.verifyToken(token);
+    // Use the standalone verifyToken function from @clerk/backend
+    const payload = await verifyToken(token, {
+      secretKey: process.env.CLERK_SECRET_KEY!,
+    });
     if (!payload?.sub) return null;
-    // Get email from Clerk user
+    // Get email from Clerk
     const user = await clerk.users.getUser(payload.sub);
     const email = user.emailAddresses?.[0]?.emailAddress ?? "";
     return { userId: payload.sub, email };
