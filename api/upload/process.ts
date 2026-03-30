@@ -8,7 +8,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   Object.entries(securityHeaders).forEach(([k, v]) => res.setHeader(k, v));
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  // Clerk auth — requireAuth is now async
   const user = await requireAuth(req.headers.authorization);
   if (!user) return res.status(401).json({ error: "Not authenticated." });
 
@@ -19,29 +18,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const siteId = uuidv4();
     const siteName = sanitize(fileName.replace(/\.zip$/i, "") || "Untitled Site");
 
+    // Render processes the ZIP — no timeout, handles any file size
+    const renderUrl = (process.env.RENDER_URL || "").trim().replace(/\/$/, "");
+    // Worker still SERVES the final deployed site files
     const workerUrl = (process.env.WORKER_URL || "").trim().replace(/\/$/, "");
     const workerSecret = process.env.WORKER_SECRET;
 
-    if (!workerUrl || !workerSecret) {
-      return res.status(500).json({ error: "Worker not configured." });
+    if (!renderUrl || !workerSecret) {
+      return res.status(500).json({ error: "Processor not configured." });
     }
 
-    // Fire and forget — call Worker without awaiting (avoids Vercel timeout)
-    fetch(`${workerUrl}`, {
+    // Final site URL — served by Cloudflare Worker from R2
+    const siteUrl = `${workerUrl}/sites/${siteId}/`;
+
+    // Save to DB immediately so user gets their link right away
+    await pool.query(
+      "INSERT INTO sites (id, user_id, name, url) VALUES ($1, $2, $3, $4)",
+      [siteId, user.userId, siteName, siteUrl]
+    );
+
+    // Call Render in background — it downloads ZIP from R2, extracts, uploads files back to R2
+    // Fire and forget — no Vercel timeout issue
+    fetch(`${renderUrl}/process`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-Worker-Secret": workerSecret,
       },
       body: JSON.stringify({ r2Key, fileName, userId: user.userId, siteId }),
-    }).catch((err) => console.error("Worker fire-and-forget error:", err));
-
-    // Save to DB immediately with the correct Worker URL
-    const siteUrl = `${workerUrl}/sites/${siteId}/`;
-    await pool.query(
-      "INSERT INTO sites (id, user_id, name, url) VALUES ($1, $2, $3, $4)",
-      [siteId, user.userId, siteName, siteUrl]
-    );
+    }).catch((err) => console.error("Render processor error:", err));
 
     return res.json({ id: siteId, name: siteName, url: siteUrl, completed: true });
 
