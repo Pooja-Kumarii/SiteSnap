@@ -642,13 +642,6 @@ function DeployContent({isDark}:{isDark:boolean}){
   const removeToast=(id:string)=>setToasts(p=>p.filter(x=>x.id!==id));
   const authFetch=useCallback(async(url:string,options:RequestInit={})=>{const token=await getToken();return fetch(url,{...options,headers:{...options.headers,Authorization:`Bearer ${token}`}});},[getToken]);
   useEffect(()=>{authFetch('/api/sites').then(r=>r.ok?r.json():[]).then(setSites).catch(()=>{});},[]);
-  // Wake up Render on page load so it's ready when user uploads
-  useEffect(()=>{
-    const renderUrl = import.meta.env.VITE_RENDER_URL;
-    if(renderUrl){
-      fetch(`${renderUrl}/health`).catch(()=>{});
-    }
-  },[]);
   const deleteSite=async(id:string)=>{
     if(!window.confirm('Delete this site?'))return;
     try{
@@ -771,6 +764,12 @@ function SignedInApp({isDark,onToggleTheme}:{isDark:boolean;onToggleTheme:()=>vo
   const [page,setPage]=useState<NavPage>('home');
   const [showLogout,setShowLogout]=useState(false);
   const handleLogout=async()=>{setShowLogout(false);await signOut();};
+
+  // Wake up Render the moment user logs in — by the time they upload, Render is ready
+  useEffect(()=>{
+    const renderUrl = import.meta.env.VITE_RENDER_URL;
+    if(renderUrl) fetch(`${renderUrl}/health`).catch(()=>{});
+  },[]);
   return(
     <div style={{minHeight:'100vh',background:t.bg,color:t.text,fontFamily:"'Inter',sans-serif",transition:'background 0.3s'}}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');*{box-sizing:border-box;}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>

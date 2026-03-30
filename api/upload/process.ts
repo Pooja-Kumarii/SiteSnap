@@ -2,12 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { requireAuth, sanitize, securityHeaders, pool } from "../_helpers.js";
 import { v4 as uuidv4 } from "uuid";
 
-export const config = {
-  api: {
-    bodyParser: { sizeLimit: "1mb" },
-    maxDuration: 60, // Give Vercel 60s to call Render
-  }
-};
+export const config = { api: { bodyParser: { sizeLimit: "1mb" } } };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   Object.entries(securityHeaders).forEach(([k, v]) => res.setHeader(k, v));
@@ -33,24 +28,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const siteUrl = `${workerUrl}/sites/${siteId}/`;
 
-    // Save to DB immediately so user gets their link
+    // Save to DB immediately
     await pool.query(
       "INSERT INTO sites (id, user_id, name, url) VALUES ($1, $2, $3, $4)",
       [siteId, user.userId, siteName, siteUrl]
     );
 
-    // Step 1: Wake up Render first (free tier sleeps after inactivity)
-    // This ping takes 30-60s on cold start — we wait for it
-    console.log("Waking up Render...");
-    try {
-      await fetch(`${renderUrl}/health`, { method: "GET" });
-      console.log("Render is awake!");
-    } catch (e) {
-      console.log("Render wake ping failed, trying anyway:", e);
-    }
-
-    // Step 2: Now call Render to process — it should respond quickly since it's awake
-    console.log("Calling Render /process...");
+    // Fire and forget — NEVER await Render (it may be sleeping)
+    // Render will wake up and process the ZIP, files will appear in R2
     fetch(`${renderUrl}/process`, {
       method: "POST",
       headers: {
@@ -58,13 +43,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         "X-Worker-Secret": workerSecret,
       },
       body: JSON.stringify({ r2Key, fileName, userId: user.userId, siteId }),
-    }).then(r => {
-      console.log("Render /process responded:", r.status);
-    }).catch(err => {
-      console.error("Render /process error:", err);
-    });
+    }).catch(() => {});
 
-    // Return immediately — Render processes in background
+    // Return immediately to user — don't wait for Render at all
     return res.json({ id: siteId, name: siteName, url: siteUrl, completed: true });
 
   } catch (e: any) {
