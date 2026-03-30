@@ -69,18 +69,43 @@ function useIsMobile(bp=768){
 
 async function validateWordPressZip(file: File): Promise<{ valid: boolean; reason?: string }> {
   return new Promise((resolve) => {
+    // First check: must be a ZIP file by extension
+    if (!file.name.toLowerCase().endsWith('.zip')) {
+      resolve({ valid: false, reason: 'Wrong file type. Please upload a .zip file.' });
+      return;
+    }
+
+    // For large files, only read first 100KB to check ZIP magic bytes + central directory
+    const SAMPLE_SIZE = 100 * 1024; // 100KB sample for large files
+    const blob = file.size > 10 * 1024 * 1024 ? file.slice(0, SAMPLE_SIZE) : file;
+
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const buf = e.target?.result as ArrayBuffer;
         if (!buf) { resolve({ valid: false, reason: 'Could not read file.' }); return; }
         const bytes = new Uint8Array(buf);
-        if (bytes[0] !== 0x50 || bytes[1] !== 0x4B) { resolve({ valid: false, reason: 'Not a valid ZIP file.' }); return; }
+
+        // Check ZIP magic bytes: PK (0x50 0x4B)
+        if (bytes[0] !== 0x50 || bytes[1] !== 0x4B) {
+          resolve({ valid: false, reason: 'This is not a valid ZIP file. Please upload a .zip file exported from WordPress.' });
+          return;
+        }
+
+        // For large files we only sampled the start — trust the ZIP magic bytes check
+        // The Render server will do full validation when it processes the file
+        if (file.size > 10 * 1024 * 1024) {
+          resolve({ valid: true });
+          return;
+        }
+
+        // For smaller files do full validation
         let eocdOffset = -1;
         for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65558); i--) {
           if (bytes[i]===0x50&&bytes[i+1]===0x4B&&bytes[i+2]===0x05&&bytes[i+3]===0x06) { eocdOffset = i; break; }
         }
-        if (eocdOffset === -1) { resolve({ valid: false, reason: 'Could not read ZIP structure.' }); return; }
+        if (eocdOffset === -1) { resolve({ valid: false, reason: 'Could not read ZIP structure. File may be corrupted.' }); return; }
+
         const view = new DataView(buf);
         const cdOffset = view.getUint32(eocdOffset + 16, true);
         const cdSize   = view.getUint32(eocdOffset + 12, true);
@@ -96,16 +121,40 @@ async function validateWordPressZip(file: File): Promise<{ valid: boolean; reaso
           fileNames.push(name);
           pos += 46 + fnLen + exLen + cmLen;
         }
+
         if (fileNames.length === 0) { resolve({ valid: false, reason: 'ZIP appears to be empty.' }); return; }
+
+        // Check it is NOT a source code project
+        const hasPackageJson = fileNames.some(n => n === 'package.json' || n.endsWith('/package.json'));
+        const hasServerTs    = fileNames.some(n => n === 'server.ts' || n.endsWith('/server.ts'));
+        const hasNodeModules = fileNames.some(n => n.includes('node_modules/'));
+        if (hasPackageJson && (hasServerTs || hasNodeModules)) {
+          resolve({ valid: false, reason: 'This looks like source code, not a WordPress site. Export using Simply Static plugin.' });
+          return;
+        }
+
+        // Must have index.html OR wp-content OR wp-includes
         const hasIndex      = fileNames.some(n => n === 'index.html' || n.endsWith('/index.html'));
         const hasWpContent  = fileNames.some(n => n.startsWith('wp-content/'));
         const hasWpIncludes = fileNames.some(n => n.startsWith('wp-includes/'));
-        if (!hasIndex && !hasWpContent && !hasWpIncludes) { resolve({ valid: false, reason: 'No WordPress content found. Export using Simply Static plugin.' }); return; }
+        const hasCss        = fileNames.some(n => n.endsWith('.css'));
+        const hasHtml       = fileNames.some(n => n.endsWith('.html') || n.endsWith('.htm'));
+
+        if (!hasIndex && !hasWpContent && !hasWpIncludes) {
+          resolve({ valid: false, reason: 'No WordPress content found. Please export your site using the Simply Static plugin.' });
+          return;
+        }
+
+        if (!hasCss && !hasHtml) {
+          resolve({ valid: false, reason: 'ZIP does not contain a valid static site. Use Simply Static plugin to export.' });
+          return;
+        }
+
         resolve({ valid: true });
-      } catch { resolve({ valid: false, reason: 'Could not read ZIP contents.' }); }
+      } catch { resolve({ valid: false, reason: 'Could not read ZIP contents. File may be corrupted.' }); }
     };
     reader.onerror = () => resolve({ valid: false, reason: 'Failed to read file.' });
-    reader.readAsArrayBuffer(file);
+    reader.readAsArrayBuffer(blob);
   });
 }
 
@@ -606,7 +655,7 @@ function DeployContent({isDark}:{isDark:boolean}){
     if(rejected.length>0||accepted.length===0){addToast('warning','Wrong file type','Only .zip files are accepted.',8000);return;}
     const file=accepted[0];
     if(!file.name.toLowerCase().endsWith('.zip')){addToast('warning','Wrong file type','Only .zip files are accepted.',8000);return;}
-    if(file.size>5*1024*1024){addToast('error','File too large',`Max size is 5MB. Your file is ${(file.size/1024/1024).toFixed(1)}MB.`,10000);return;}
+    // No frontend size limit — Render handles any size
     const v=await validateWordPressZip(file);
     if(!v.valid){addToast('error','Not a WordPress ZIP',v.reason||'Use Simply Static plugin.',10000);return;}
     setIsUploading(true);setUploadProgress(0);
@@ -619,7 +668,7 @@ function DeployContent({isDark}:{isDark:boolean}){
       setUploadProgress(80);
       const proc=await authFetch('/api/upload/process',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({r2Key,fileName:file.name})});
       const result=await proc.json();
-      if(proc.status===413||result.error==='file_too_large'){setIsUploading(false);setUploadProgress(0);addToast('error','File too large','Max allowed is 5MB.',10000);return;}
+      // Size handled by Render processor
       if(proc.status===422||result.error==='invalid_zip'){setIsUploading(false);setUploadProgress(0);addToast('warning','Not a WordPress ZIP',result.message||'Use Simply Static plugin.',10000);return;}
       if(!proc.ok)throw new Error(result.error||'Processing failed.');
       setUploadProgress(100);
@@ -655,7 +704,7 @@ function DeployContent({isDark}:{isDark:boolean}){
               <div style={{textAlign:'center',padding:'0 1rem'}}>
                 <p style={{fontSize:'0.88rem',fontWeight:600,color:t.text2,margin:0}}>{isUploading?`Uploading... ${uploadProgress}%`:(isDragActive?'Drop it here!':'Drop your ZIP here')}</p>
                 <p style={{fontSize:'0.72rem',color:t.textDim,marginTop:'0.25rem'}}>{isUploading?'Please wait — do not close this tab':isMobile?'tap to browse files':'or click to browse files'}</p>
-                {!isUploading&&<p style={{fontSize:'0.65rem',color:t.textDim,marginTop:'0.7rem',background:isDark?'#1a1a1a':'#f1f5f9',padding:'0.2rem 0.7rem',borderRadius:'100px',display:'inline-block'}}>WordPress ZIP · Max 5MB</p>}
+                {!isUploading&&<p style={{fontSize:'0.65rem',color:t.textDim,marginTop:'0.7rem',background:isDark?'#1a1a1a':'#f1f5f9',padding:'0.2rem 0.7rem',borderRadius:'100px',display:'inline-block'}}>WordPress ZIP · Any size</p>}
               </div>
             </div>
           </div>
