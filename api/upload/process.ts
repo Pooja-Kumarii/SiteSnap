@@ -2,7 +2,12 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { requireAuth, sanitize, securityHeaders, pool } from "../_helpers.js";
 import { v4 as uuidv4 } from "uuid";
 
-export const config = { api: { bodyParser: { sizeLimit: "1mb" } } };
+export const config = {
+  api: {
+    bodyParser: { sizeLimit: "1mb" },
+    maxDuration: 60, // Give Vercel 60s to call Render
+  }
+};
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   Object.entries(securityHeaders).forEach(([k, v]) => res.setHeader(k, v));
@@ -22,53 +27,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const workerUrl = (process.env.WORKER_URL || "").trim().replace(/\/$/, "");
     const workerSecret = process.env.WORKER_SECRET;
 
-    // Log env vars to Vercel logs for debugging
-    console.log("RENDER_URL:", renderUrl || "MISSING!");
-    console.log("WORKER_URL:", workerUrl || "MISSING!");
-    console.log("WORKER_SECRET set:", !!workerSecret);
-
     if (!renderUrl || !workerSecret) {
-      return res.status(500).json({
-        error: "Processor not configured.",
-        debug: { renderUrl: !!renderUrl, workerSecret: !!workerSecret }
-      });
+      return res.status(500).json({ error: "Processor not configured." });
     }
 
     const siteUrl = `${workerUrl}/sites/${siteId}/`;
 
-    // Save to DB immediately
+    // Save to DB immediately so user gets their link
     await pool.query(
       "INSERT INTO sites (id, user_id, name, url) VALUES ($1, $2, $3, $4)",
       [siteId, user.userId, siteName, siteUrl]
     );
 
-    // Call Render — wait up to 10 seconds to confirm it received the request
-    // then return to user (Render processes in background)
-    const renderCallPromise = fetch(`${renderUrl}/process`, {
+    // Step 1: Wake up Render first (free tier sleeps after inactivity)
+    // This ping takes 30-60s on cold start — we wait for it
+    console.log("Waking up Render...");
+    try {
+      await fetch(`${renderUrl}/health`, { method: "GET" });
+      console.log("Render is awake!");
+    } catch (e) {
+      console.log("Render wake ping failed, trying anyway:", e);
+    }
+
+    // Step 2: Now call Render to process — it should respond quickly since it's awake
+    console.log("Calling Render /process...");
+    fetch(`${renderUrl}/process`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-Worker-Secret": workerSecret,
       },
       body: JSON.stringify({ r2Key, fileName, userId: user.userId, siteId }),
+    }).then(r => {
+      console.log("Render /process responded:", r.status);
+    }).catch(err => {
+      console.error("Render /process error:", err);
     });
 
-    // Wait max 10s for Render to acknowledge — then return regardless
-    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 10000));
-
-    const renderRes = await Promise.race([renderCallPromise, timeoutPromise]);
-
-    if (renderRes === null) {
-      console.log("Render call timed out after 10s — processing in background");
-    } else {
-      const renderResTyped = renderRes as Response;
-      console.log("Render responded with status:", renderResTyped.status);
-      if (!renderResTyped.ok) {
-        const errText = await renderResTyped.text().catch(() => "unknown");
-        console.error("Render error response:", errText);
-      }
-    }
-
+    // Return immediately — Render processes in background
     return res.json({ id: siteId, name: siteName, url: siteUrl, completed: true });
 
   } catch (e: any) {

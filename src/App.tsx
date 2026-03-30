@@ -642,6 +642,13 @@ function DeployContent({isDark}:{isDark:boolean}){
   const removeToast=(id:string)=>setToasts(p=>p.filter(x=>x.id!==id));
   const authFetch=useCallback(async(url:string,options:RequestInit={})=>{const token=await getToken();return fetch(url,{...options,headers:{...options.headers,Authorization:`Bearer ${token}`}});},[getToken]);
   useEffect(()=>{authFetch('/api/sites').then(r=>r.ok?r.json():[]).then(setSites).catch(()=>{});},[]);
+  // Wake up Render on page load so it's ready when user uploads
+  useEffect(()=>{
+    const renderUrl = import.meta.env.VITE_RENDER_URL;
+    if(renderUrl){
+      fetch(`${renderUrl}/health`).catch(()=>{});
+    }
+  },[]);
   const deleteSite=async(id:string)=>{
     if(!window.confirm('Delete this site?'))return;
     try{
