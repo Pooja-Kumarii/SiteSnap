@@ -592,12 +592,19 @@ function HomeContent({isDark,onDeploy}:{isDark:boolean;onDeploy:()=>void}){
       </section>
       {/* How it works */}
       <section id="hp-how" style={{padding:isMobile?'3rem 1.2rem':'6rem 3rem',borderTop:`1px solid ${t.border}`,position:'relative',zIndex:1}}>
-        <div style={{maxWidth:700,margin:'0 auto'}}>
+        <div style={{maxWidth:780,margin:'0 auto'}}>
           <Reveal dir="up">
             <div style={{fontSize:'0.7rem',color:t.accentText,letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:'0.5rem',fontWeight:600}}>How it works</div>
-            <h2 style={{fontSize:isMobile?'1.6rem':'clamp(1.8rem,4vw,2.8rem)',fontWeight:700,letterSpacing:'-0.04em',marginBottom:'2rem',color:t.text2}}>Three steps. That's it.</h2>
+            <h2 style={{fontSize:isMobile?'1.6rem':'clamp(1.8rem,4vw,2.8rem)',fontWeight:700,letterSpacing:'-0.04em',marginBottom:'0.6rem',color:t.text2}}>Three steps. That's it.</h2>
+            <p style={{fontSize:'0.88rem',color:t.textMuted,marginBottom:'2.5rem',lineHeight:1.6}}>Follow these steps exactly to get your WordPress site live with SiteSnap.</p>
           </Reveal>
-          {[{n:'01',title:'Export from WordPress',desc:'Use the Simply Static plugin to export your site as a ZIP file.'},{n:'02',title:'Upload to SiteSnap',desc:'Drop your ZIP. It goes directly to secure cloud storage.'},{n:'03',title:'Share your link',desc:'Get a permanent URL instantly. Share it with anyone, anytime.'}].map((s,idx,arr)=>(
+
+          {/* Steps */}
+          {[
+            {n:'01',title:'Export from WordPress',desc:'Install the Simply Static plugin and export your site as a ZIP file. Follow the setup guide below carefully.'},
+            {n:'02',title:'Upload to SiteSnap',desc:'Drop your exported ZIP into the Deploy section. It uploads directly to secure cloud storage — any file size.'},
+            {n:'03',title:'Wait & Share',desc:'Processing takes 5–8 minutes. Once done your link auto-refreshes and you can share it with anyone, permanently.'}
+          ].map((s,idx,arr)=>(
             <Reveal key={s.n} dir="left" delay={idx*80}>
               <div style={{display:'flex',gap:'1.2rem',padding:'1.5rem 0',borderBottom:idx<arr.length-1?`1px solid ${t.border}`:'none'}}>
                 <div style={{fontSize:'0.65rem',color:t.accent,minWidth:28,paddingTop:3,fontWeight:700,fontFamily:'monospace'}}>{s.n}</div>
@@ -605,6 +612,100 @@ function HomeContent({isDark,onDeploy}:{isDark:boolean;onDeploy:()=>void}){
               </div>
             </Reveal>
           ))}
+
+          {/* Simply Static Setup Guide */}
+          <Reveal dir="up" delay={200}>
+            <div style={{marginTop:'3rem',background:isDark?'rgba(14,165,233,0.04)':'rgba(14,165,233,0.03)',border:`1px solid rgba(14,165,233,0.2)`,borderRadius:'16px',overflow:'hidden'}}>
+              {/* Header */}
+              <div style={{background:isDark?'rgba(14,165,233,0.1)':'rgba(14,165,233,0.07)',padding:isMobile?'1.2rem 1.4rem':'1.4rem 2rem',borderBottom:`1px solid rgba(14,165,233,0.15)`,display:'flex',alignItems:'center',gap:12}}>
+                <div style={{width:36,height:36,background:'rgba(14,165,233,0.15)',border:`1px solid rgba(14,165,233,0.3)`,borderRadius:'8px',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                  <Zap size={16} color={t.accent}/>
+                </div>
+                <div>
+                  <div style={{fontSize:isMobile?'0.95rem':'1.05rem',fontWeight:700,color:t.text2,letterSpacing:'-0.02em'}}>Simply Static — Export Setup Guide</div>
+                  <div style={{fontSize:'0.75rem',color:t.textMuted,marginTop:2}}>Follow these settings exactly for the best results</div>
+                </div>
+              </div>
+
+              <div style={{padding:isMobile?'1.4rem':'2rem'}}>
+                {/* Step 1 - Install */}
+                <div style={{marginBottom:'1.8rem'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:'0.6rem'}}>
+                    <span style={{background:'rgba(14,165,233,0.15)',color:t.accent,fontSize:'0.65rem',fontWeight:700,padding:'0.2rem 0.55rem',borderRadius:'100px'}}>STEP 1</span>
+                    <span style={{fontSize:isMobile?'0.88rem':'0.95rem',fontWeight:600,color:t.text2}}>Install Simply Static</span>
+                  </div>
+                  <p style={{fontSize:'0.82rem',color:t.textMuted,lineHeight:1.7,paddingLeft:isMobile?0:'1.2rem'}}>
+                    In your WordPress admin, go to <strong style={{color:t.text}}>Plugins → Add New</strong> → search for <strong style={{color:t.text}}>"Simply Static"</strong> → Install and Activate.
+                  </p>
+                </div>
+
+                {/* Step 2 - URL Settings */}
+                <div style={{marginBottom:'1.8rem'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:'0.6rem'}}>
+                    <span style={{background:'rgba(14,165,233,0.15)',color:t.accent,fontSize:'0.65rem',fontWeight:700,padding:'0.2rem 0.55rem',borderRadius:'100px'}}>STEP 2</span>
+                    <span style={{fontSize:isMobile?'0.88rem':'0.95rem',fontWeight:600,color:t.text2}}>Configure URL Settings</span>
+                  </div>
+                  <p style={{fontSize:'0.82rem',color:t.textMuted,lineHeight:1.7,marginBottom:'0.8rem',paddingLeft:isMobile?0:'1.2rem'}}>
+                    Go to <strong style={{color:t.text}}>Simply Static → Settings → General</strong> and set the following:
+                  </p>
+                  <div style={{paddingLeft:isMobile?0:'1.2rem',display:'flex',flexDirection:'column',gap:'0.6rem'}}>
+                    {[
+                      {label:'Replacing URLs',value:'Absolute URLs',important:true},
+                      {label:'Scheme',value:'http://'},
+                      {label:'Host',value:'Your local WordPress URL (e.g. localhost/mysite)'},
+                      {label:'Force URL Replacements',value:'ON — must be enabled',important:true},
+                    ].map(item=>(
+                      <div key={item.label} style={{display:'flex',gap:12,alignItems:'flex-start',background:isDark?'rgba(255,255,255,0.03)':'rgba(0,0,0,0.03)',border:`1px solid ${t.border}`,borderRadius:'8px',padding:'0.65rem 0.9rem'}}>
+                        <div style={{fontSize:'0.78rem',color:t.textMuted,minWidth:isMobile?120:160,flexShrink:0}}>{item.label}</div>
+                        <div style={{fontSize:'0.78rem',color:item.important?t.accent:t.text,fontWeight:item.important?600:400}}>{item.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Step 3 - Enhanced Crawl */}
+                <div style={{marginBottom:'1.8rem'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:'0.6rem'}}>
+                    <span style={{background:'rgba(14,165,233,0.15)',color:t.accent,fontSize:'0.65rem',fontWeight:700,padding:'0.2rem 0.55rem',borderRadius:'100px'}}>STEP 3</span>
+                    <span style={{fontSize:isMobile?'0.88rem':'0.95rem',fontWeight:600,color:t.text2}}>Enable Enhanced Crawl</span>
+                  </div>
+                  <p style={{fontSize:'0.82rem',color:t.textMuted,lineHeight:1.7,paddingLeft:isMobile?0:'1.2rem'}}>
+                    Still in Settings, scroll to <strong style={{color:t.text}}>Enhanced Crawl</strong> and make sure <strong style={{color:t.text}}>Enable Enhanced Crawl</strong> is turned <strong style={{color:t.accent}}>ON</strong>. This ensures all images, fonts and assets are included in the export.
+                  </p>
+                </div>
+
+                {/* Step 4 - Export */}
+                <div style={{marginBottom:'1.8rem'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:'0.6rem'}}>
+                    <span style={{background:'rgba(14,165,233,0.15)',color:t.accent,fontSize:'0.65rem',fontWeight:700,padding:'0.2rem 0.55rem',borderRadius:'100px'}}>STEP 4</span>
+                    <span style={{fontSize:isMobile?'0.88rem':'0.95rem',fontWeight:600,color:t.text2}}>Generate Your ZIP</span>
+                  </div>
+                  <p style={{fontSize:'0.82rem',color:t.textMuted,lineHeight:1.7,paddingLeft:isMobile?0:'1.2rem'}}>
+                    Go to <strong style={{color:t.text}}>Simply Static → Generate</strong> and click the <strong style={{color:t.text}}>Generate</strong> button. Wait for it to complete, then click <strong style={{color:t.text}}>Download ZIP</strong>. That ZIP file is what you upload to SiteSnap.
+                  </p>
+                </div>
+
+                {/* Warning box */}
+                <div style={{background:isDark?'rgba(245,158,11,0.07)':'rgba(245,158,11,0.05)',border:`1px solid rgba(245,158,11,0.25)`,borderRadius:'10px',padding:'0.9rem 1.1rem',marginBottom:'1.5rem',display:'flex',gap:10,alignItems:'flex-start'}}>
+                  <AlertTriangle size={14} color={t.warning} style={{flexShrink:0,marginTop:2}}/>
+                  <p style={{fontSize:'0.78rem',color:t.textMuted,lineHeight:1.6,margin:0}}>
+                    <strong style={{color:t.warning}}>Important:</strong> Make sure your WordPress site is running locally (via XAMPP, WAMP, Local, etc.) and all pages are published before generating the export.
+                  </p>
+                </div>
+
+                {/* Link to Simply Static */}
+                <div style={{borderTop:`1px solid ${t.border}`,paddingTop:'1.2rem',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:'0.8rem'}}>
+                  <span style={{fontSize:'0.78rem',color:t.textDim}}>Need help with Simply Static?</span>
+                  <a href="https://wordpress.org/plugins/simply-static/" target="_blank" rel="noreferrer"
+                    style={{display:'inline-flex',alignItems:'center',gap:6,background:'transparent',border:`1px solid ${t.border2}`,color:t.accent,padding:'0.45rem 1rem',borderRadius:'6px',fontSize:'0.78rem',fontWeight:500,textDecoration:'none',transition:'all 0.2s'}}
+                    onMouseOver={e=>{(e.currentTarget as HTMLAnchorElement).style.borderColor=t.accent;}}
+                    onMouseOut={e=>{(e.currentTarget as HTMLAnchorElement).style.borderColor=t.border2;}}>
+                    <ExternalLink size={12}/> Simply Static Plugin →
+                  </a>
+                </div>
+              </div>
+            </div>
+          </Reveal>
         </div>
       </section>
       {/* CTA */}
