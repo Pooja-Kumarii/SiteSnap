@@ -775,7 +775,7 @@ function DeployContent({isDark}:{isDark:boolean}){
       setUploadProgress(100);
       setSites(p=>[{id:result.id,name:result.name,created_at:new Date().toISOString(),url:result.url},...p]);
       setIsUploading(false);setUploadProgress(0);
-      addToast('success','Site deployed!',`"${result.name}" is live. Copy the link!`);
+      addToast('success','Upload complete!',`Processing started for "${result.name}". Wait 5-8 mins then open the link.`,15000);
     }catch(e:any){setIsUploading(false);setUploadProgress(0);addToast('error','Upload failed',e.message||'Something went wrong.');}
   },[addToast,authFetch]);
   const{getRootProps,getInputProps,isDragActive}=useDropzone({onDrop,accept:{'application/zip':['.zip']},multiple:false});

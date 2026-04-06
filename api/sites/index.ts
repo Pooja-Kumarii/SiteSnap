@@ -360,7 +360,7 @@ export default {
         return new Response(fallback.body, {
           headers: {
             "Content-Type": "text/html",
-            "Cache-Control": "public, max-age=3600",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
             ...corsHeaders,
           },
         });
@@ -374,7 +374,7 @@ export default {
       return new Response(object.body, {
         headers: {
           "Content-Type": getContentType(ext),
-          "Cache-Control": "public, max-age=3600",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
           ...corsHeaders,
         },
       });
